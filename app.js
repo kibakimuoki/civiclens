@@ -35,10 +35,14 @@ processBtn.addEventListener("click", async () => {
   status.innerText = "Processing documents...";
 
   for (let file of uploadedFiles) {
-    const rawText = await extractText(file);
-    const cleaned = cleanText(rawText);
-    const structured = await analyzeDocument(cleaned, file.name);
-    displayResult(structured);
+    try {
+      const rawText = await extractText(file);
+      const cleaned = cleanText(rawText);
+      const structured = await analyzeDocument(cleaned, file.name);
+      displayResult(structured);
+    } catch (err) {
+      console.error("Failed processing file:", file.name, err);
+    }
   }
 
   status.innerText = "Done.";
@@ -75,9 +79,10 @@ async function extractText(file) {
 // CLEAN TEXT
 // ==========================
 function cleanText(text) {
-  text = text.replace(/(\d+)\s+t\s+h/g, "$1th"); // Fix ordinals
+  text = text.replace(/(\d+)\s+t\s+h/gi, "$1th"); // Fix ordinals
   text = text.replace(/Disclaimer\s*:\s*The electronic version[^.]+\./gi, "");
-  text = text.replace(/\s+/g, " ");
+  text = text.replace(/\s{2,}/g, " "); // collapse multiple spaces
+  text = text.replace(/(\r\n|\n|\r)/gm, " "); // remove line breaks
   return text.trim();
 }
 
@@ -138,7 +143,8 @@ function detectSector(text) {
 function extractDate(text) {
   const patterns = [
     /\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
-    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}\b/i
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}\b/i,
+    /\b\d{1,2}\s+(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)\s+\d{4}\b/i
   ];
   for (let p of patterns) {
     const match = text.match(p);
@@ -148,22 +154,40 @@ function extractDate(text) {
 }
 
 // ==========================
+// CHUNKING HELPER
+// ==========================
+function chunkText(text, chunkSize = 1500) {
+  const chunks = [];
+  for (let i = 0; i < text.length; i += chunkSize) {
+    chunks.push(text.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
+// ==========================
 // AI SUMMARY
 // ==========================
 async function generateSummary(text) {
 
-  // Clean procedural noise
+  // Remove procedural noise
   text = text.replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
   text = text.replace(/(Disclaimer|National Assembly Debates|Electronic version|Hansard Editor)/gi, "");
 
-  const chunk = text.substring(0, 1500); // Model-safe
+  const chunks = chunkText(text, 1500); // split into manageable pieces
+  let summaries = [];
 
-  const result = await summarizer(chunk, {
-    max_length: 130,
-    min_length: 50
-  });
+  for (let c of chunks) {
+    try {
+      const res = await summarizer(c, { min_length: 50, max_length: 130 });
+      if (res && res[0] && res[0].summary_text) {
+        summaries.push(res[0].summary_text);
+      }
+    } catch (err) {
+      console.warn("Chunk summary failed:", err);
+    }
+  }
 
-  if (result && result[0] && result[0].summary_text) return result[0].summary_text;
+  if (summaries.length > 0) return summaries.join(" ");
 
   return "No summary available.";
 }
