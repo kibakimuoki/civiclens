@@ -1,26 +1,16 @@
-// --- Demo Toggle ---
-const toggleBtn = document.getElementById('toggle-btn');
-const demoContent = document.getElementById('demo-content');
-let showOriginal = false;
+// Store summaries
+let summaries = [];
 
-toggleBtn.addEventListener('click', () => {
-  if (showOriginal) {
-    demoContent.innerHTML = '<p><strong>AI Summary:</strong> Deputy Speaker moves Special Motions based on committee reports, approvals of appointments, and public participation updates in plain language.</p>';
-    toggleBtn.textContent = 'Show Original Hansard';
-  } else {
-    demoContent.innerHTML = '<p><strong>Original Hansard:</strong> THAT, taking into consideration the findings of the Departmental Committee on Labour in its report on the approval hearing of a Nominee for Appointment as the Commission Secretary/Chief Executive Officer...</p>';
-    toggleBtn.textContent = 'Show AI Summary';
+// Load default dataset
+async function loadDataset() {
+  try {
+    const response = await fetch('civiclens_dataset.json');
+    const data = await response.json();
+    summaries.push(...data);
+    displaySummaries(summaries);
+  } catch (err) {
+    console.error('Error loading dataset:', err);
   }
-  showOriginal = !showOriginal;
-});
-
-// --- Summaries ---
-const summaries = [];
-
-// Simple AI-like summarizer (first 2 sentences)
-function summarizeText(text) {
-  const sentences = text.split(/(?<=[.!?])\s+/);
-  return sentences.slice(0, 2).join(' ');
 }
 
 // Display summaries
@@ -35,42 +25,63 @@ function displaySummaries(list) {
       <p><strong>Date:</strong> ${doc.date || 'N/A'}</p>
       <p><strong>Sector:</strong> ${doc.sector || 'N/A'}</p>
       <p>${doc.summary}</p>
-      <a href="${doc.source_file}" target="_blank">View Source</a>
+      <a href="${doc.source_file || '#'}" target="_blank">View Source</a>
     `;
     container.appendChild(card);
   });
 }
 
-// Process uploaded files
-async function processFiles(files) {
-  for (const file of files) {
-    const text = await file.text();
-    summaries.push({
-      title: file.name.replace(/\.[^/.]+$/, ""),
-      date: "N/A",
-      sector: "N/A",
-      summary: summarizeText(text),
-      source_file: URL.createObjectURL(file)
-    });
-  }
-  displaySummaries(summaries);
-}
-
-// Filter search
-function filterSummaries(query) {
-  const filtered = summaries.filter(doc =>
-    doc.title.toLowerCase().includes(query.toLowerCase()) ||
-    doc.summary.toLowerCase().includes(query.toLowerCase())
+// Search functionality
+document.getElementById('search-box').addEventListener('input', e => {
+  const term = e.target.value.toLowerCase();
+  const filtered = summaries.filter(s =>
+    s.title.toLowerCase().includes(term) ||
+    (s.sector && s.sector.toLowerCase().includes(term)) ||
+    (s.summary && s.summary.toLowerCase().includes(term)) ||
+    (s.keywords && s.keywords.join(' ').toLowerCase().includes(term))
   );
   displaySummaries(filtered);
+});
+
+// Handle PDF uploads
+document.getElementById('pdf-upload').addEventListener('change', async e => {
+  const files = Array.from(e.target.files);
+  for (let file of files) {
+    const text = await extractPDFText(file);
+    const summary = summarizeText(text); // Simple AI placeholder
+    const doc = {
+      id: file.name,
+      title: file.name,
+      date: 'N/A',
+      sector: 'N/A',
+      summary,
+      source_file: '#'
+    };
+    summaries.unshift(doc);
+    displaySummaries(summaries);
+  }
+});
+
+// Extract text from PDF using PDF.js
+async function extractPDFText(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+  let fullText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const strings = content.items.map(item => item.str);
+    fullText += strings.join(' ') + '\n';
+  }
+  return fullText;
 }
 
-// Event listeners
-document.getElementById('processBtn').addEventListener('click', () => {
-  const files = document.getElementById('fileUpload').files;
-  if (files.length) processFiles(files);
-});
+// Very simple AI-style summarizer
+function summarizeText(text) {
+  // Simple: take first 3 sentences
+  const sentences = text.match(/[^\.!\?]+[\.!\?]+/g) || [];
+  return sentences.slice(0, 3).join(' ');
+}
 
-document.getElementById('searchBox').addEventListener('input', (e) => {
-  filterSummaries(e.target.value);
-});
+// Initialize
+document.addEventListener('DOMContentLoaded', loadDataset);
