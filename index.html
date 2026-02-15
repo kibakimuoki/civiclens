@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,7 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- PDF.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script type="module">
+    window.pdfjsLib = await import("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js");
+  </script>
+
+  <!-- Tesseract.js -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
 
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -29,8 +33,7 @@
   <h2>Recent Legislative Summaries</h2>
   <div id="results"></div>
 
-  <!-- Load your app -->
+  <!-- Load app.js -->
   <script type="module" src="app.js"></script>
-
 </body>
 </html>
