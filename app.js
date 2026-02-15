@@ -44,15 +44,15 @@ processBtn.addEventListener("click", async () => {
   progressBar.innerText = "0%";
   status.innerText = "Loading AI model...";
 
+  // Load AI model if not already loaded
   if (!summarizer) {
     try {
       summarizer = await pipeline("summarization", "Xenova/distilbart-cnn-6-6");
-
-      if (!summarizer) throw new Error("AI model failed to load");
+      console.log("Summarizer loaded:", summarizer);
       status.innerText = "AI model loaded.";
     } catch (err) {
-      console.warn("AI model failed to load:", err);
-      status.innerText = "AI model failed. Using fallback summaries.";
+      console.error("AI model failed to load:", err);
+      status.innerText = "AI model failed. Summaries will be truncated.";
       summarizer = null;
     }
   }
@@ -107,8 +107,8 @@ async function extractText(file) {
 
   let fullText = "";
   let ocrPagesUsed = 0;
-  const MAX_OCR_PAGES = 5;
-  const MAX_TOTAL_CHARS = 8000;
+  const MAX_OCR_PAGES = 10;
+  const MAX_TOTAL_CHARS = 15000;
 
   for (let i = 1; i <= pdf.numPages; i++) {
     try {
@@ -148,7 +148,6 @@ async function extractText(file) {
 // ==========================
 function cleanExtractedText(text) {
   if (!text) return "";
-
   text = text.replace(/[^\x00-\x7F]/g, " ");
   text = text.replace(/\s+/g, " ");
   text = text.replace(/([A-Z]\s){5,}/g, "");
@@ -166,52 +165,38 @@ function cleanExtractedText(text) {
 function normalizeBillStructure(text) {
   if (!text) return "";
 
-  // Break into lines for stronger filtering
   let lines = text.split(/\r?\n/);
 
   lines = lines.filter(line => {
     const l = line.trim();
-
     if (!l) return false;
-
-    // Remove registry / stamp junk
     if (/NATIONAL ASSEMBLY RECEIVED/i.test(l)) return false;
     if (/DIRECTOR LEGAL SERVICES/i.test(l)) return false;
     if (/P\.?\s?O\.?\s?Box/i.test(l)) return false;
     if (/REPUBLIC OF KENYA/i.test(l)) return false;
     if (/NAIROBI/i.test(l)) return false;
-
-    // Remove lines with too many numbers or symbols (OCR garbage)
     const letters = (l.match(/[a-zA-Z]/g) || []).length;
     if (letters < 15) return false;
-
     return true;
   });
 
   text = lines.join("\n");
 
-  // Prefer OBJECTS AND REASONS section
+  // Prefer OBJECTS AND REASONS
   const objectsMatch = text.match(/OBJECTS AND REASONS[\s\S]{300,4000}/i);
   if (objectsMatch) return objectsMatch[0];
 
-  // Extract main bill body starting from Clause 1
   const clauseMatch = text.match(/Clause\s+1[\s\S]{300,4000}/i);
   if (clauseMatch) return clauseMatch[0];
 
-  // Extract Hansard debate
   const hansardMatch = text.match(/The House met[\s\S]{300,4000}/i);
   if (hansardMatch) return hansardMatch[0];
 
-  // Extract Order Paper business
   const orderMatch = text.match(/ORDER OF BUSINESS[\s\S]{300,4000}/i);
   if (orderMatch) return orderMatch[0];
 
-  // Fallback (skip first 300 characters of junk)
   return text.substring(300, 3500);
 }
-
-
-
 
 // ==========================
 // BASIC CLEANING
@@ -237,9 +222,7 @@ async function analyzeDocument(text, filename) {
   if (text.length > 200 && summarizer) {
     try {
       const aiSummary = await generateSummary(text);
-      if (aiSummary && aiSummary.length > 40) {
-        summary = aiSummary;
-      }
+      if (aiSummary && aiSummary.length > 40) summary = aiSummary;
     } catch {
       summary = text.substring(0, 300) + "...";
     }
@@ -260,7 +243,8 @@ async function analyzeDocument(text, filename) {
 function extractDate(text) {
   const patterns = [
     /\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
-    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}\b/i
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}\b/i,
+    /\b\d{1,2}[-\/ ](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-\/ ]\d{4}\b/i
   ];
   for (let p of patterns) {
     const match = text.match(p);
@@ -283,32 +267,26 @@ function detectSector(text) {
 // SAFE AI SUMMARY
 // ==========================
 async function generateSummary(text) {
-  if (!text || !summarizer) {
-    return text.substring(0, 300) + "...";
-  }
+  if (!text || !summarizer) return text.substring(0, 300) + "...";
 
   try {
-    // DistilBART works best with smaller chunks
-    const input = text.slice(0, 2000);
-
-    const result = await summarizer(input, {
-      max_new_tokens: 180,
-      min_length: 60,
-      do_sample: false
-    });
-
-    return (
-      result?.[0]?.generated_text ||
-      result?.[0]?.summary_text ||
-      text.substring(0, 300) + "..."
-    );
-
+    const chunks = [];
+    const CHUNK_SIZE = 2000;
+    for (let i = 0; i < text.length; i += CHUNK_SIZE) {
+      const input = text.slice(i, i + CHUNK_SIZE);
+      const result = await summarizer(input, {
+        max_new_tokens: 180,
+        min_length: 60,
+        do_sample: false
+      });
+      chunks.push(result?.[0]?.generated_text || input.substring(0, 180));
+    }
+    return chunks.join(" ").substring(0, 500) + "...";
   } catch (err) {
     console.warn("Summarization failed:", err);
     return text.substring(0, 300) + "...";
   }
 }
-
 
 // ==========================
 // SAFE HTML ESCAPE
@@ -321,7 +299,7 @@ function escapeHTML(str) {
 }
 
 // ==========================
-// DISPLAY RESULTS (SAFE)
+// DISPLAY RESULTS
 // ==========================
 function displayResult(doc) {
   document.getElementById("placeholder")?.remove();
@@ -335,11 +313,9 @@ function displayResult(doc) {
     <p><strong>Sector:</strong> ${escapeHTML(doc.sector)}</p>
     <p><strong>AI Summary:</strong> ${escapeHTML(doc.summary)}</p>
     <p style="font-size: 12px; opacity: 0.7;">
-    
-    This summary was generated using Xenova/distilbart-cnn-6-6.
-    OCR errors or formatting noise may affect accuracy.
+      This summary was generated using Xenova/distilbart-cnn-6-6.
+      OCR errors or formatting noise may affect accuracy.
     </p>
-
     <details>
       <summary>View Extracted Text</summary>
       <p>${escapeHTML(doc.fullText)}</p>
