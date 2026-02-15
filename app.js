@@ -48,9 +48,11 @@ processBtn.addEventListener("click", async () => {
     try {
       status.innerText = `Processing file ${i + 1}/${totalFiles}: ${file.name}`;
       const rawText = await extractText(file, i, totalFiles);
-      console.log(`Extracted text length for ${file.name}: ${rawText.length}`);
+      console.log(`Extracted text length for ${file.name}:`, rawText.length);
+
       const cleaned = cleanText(rawText);
       const structured = await analyzeDocument(cleaned, file.name);
+
       if (structured.fullText && structured.fullText.trim().length > 0) {
         displayResult(structured);
       } else {
@@ -72,7 +74,7 @@ processBtn.addEventListener("click", async () => {
 });
 
 // ==========================
-// TEXT EXTRACTION
+// TEXT EXTRACTION (PDF/TXT)
 // ==========================
 async function extractText(file, fileIndex = 0, totalFiles = 1) {
   if (file.type === "application/pdf") {
@@ -83,10 +85,10 @@ async function extractText(file, fileIndex = 0, totalFiles = 1) {
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      let pageText = content.items.map(item => item.str).join(" ");
+      let pageText = content.items.map(item => item.str).join(" ").trim();
 
-      // Run OCR only if page is truly empty
-      if (!pageText.trim()) {
+      // Only use OCR if page text is truly empty
+      if (!pageText) {
         console.log(`Page ${i} empty, running OCR...`);
         const viewport = page.getViewport({ scale: 2 });
         const canvas = document.createElement("canvas");
@@ -94,9 +96,15 @@ async function extractText(file, fileIndex = 0, totalFiles = 1) {
         canvas.height = viewport.height;
         const context = canvas.getContext("2d");
         await page.render({ canvasContext: context, viewport }).promise;
-        const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
-        pageText = text;
-        console.log(`OCR result length: ${pageText.length}`);
+
+        try {
+          const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
+          const ocrText = text.trim();
+          if (ocrText) pageText = ocrText; // Only replace if OCR returned text
+          console.log(`OCR text length: ${ocrText.length}`);
+        } catch (err) {
+          console.warn(`OCR failed for page ${i}:`, err);
+        }
       }
 
       fullText += pageText + " ";
