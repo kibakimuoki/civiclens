@@ -80,67 +80,90 @@ processBtn.addEventListener("click", async () => {
 // EXTRACT TEXT (PDF + TXT) with OCR
 // ==========================
 async function extractText(file) {
-  if (file.type !== "application/pdf") return await file.text();
+  if (file.type !== "application/pdf") {
+    return await file.text();
+  }
 
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
   let fullText = "";
   const totalPages = pdf.numPages;
 
-  // Show overlay
   const overlay = document.getElementById("overlay");
   overlay.style.display = "block";
 
-  // Process pages in batches to avoid freezing
-  const BATCH_SIZE = 3; // 3 pages at a time
+  const BATCH_SIZE = 3;
+
+  // Timeout helper
+  const withTimeout = (promise, ms = 8000) =>
+    Promise.race([
+      promise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout")), ms)
+      )
+    ]);
+
   for (let batchStart = 1; batchStart <= totalPages; batchStart += BATCH_SIZE) {
     const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, totalPages);
-    const batchPages = [];
+    const batchTasks = [];
 
     for (let i = batchStart; i <= batchEnd; i++) {
-      batchPages.push(
+      batchTasks.push(
         (async () => {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          let pageText = content.items.map(item => item.str).join(" ").trim();
+          try {
+            const page = await withTimeout(pdf.getPage(i));
 
-          // Only run OCR if really empty
-          if (!pageText || pageText.length < 10) {
-            const viewport = page.getViewport({ scale: 1.5 }); // reduced scale
-            const canvas = document.createElement("canvas");
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-            const context = canvas.getContext("2d");
-            await page.render({ canvasContext: context, viewport }).promise;
-
+            let pageText = "";
             try {
-              const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
-              pageText = text.trim();
-            } catch (err) {
-              console.warn(`OCR failed for page ${i}:`, err);
+              const content = await withTimeout(page.getTextContent());
+              pageText = content.items.map(item => item.str).join(" ").trim();
+            } catch {
+              pageText = "";
             }
+
+            // If text is empty, try OCR
+            if (!pageText || pageText.length < 10) {
+              try {
+                const viewport = page.getViewport({ scale: 1.3 });
+                const canvas = document.createElement("canvas");
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                const ctx = canvas.getContext("2d");
+
+                await withTimeout(
+                  page.render({ canvasContext: ctx, viewport }).promise
+                );
+
+                const ocr = await withTimeout(
+                  Tesseract.recognize(canvas, "eng")
+                );
+                pageText = ocr.data.text.trim();
+              } catch (err) {
+                console.warn("OCR failed on page", i, err);
+              }
+            }
+
+            fullText += pageText + " ";
+          } catch (err) {
+            console.warn("Page failed:", i, err);
+          } finally {
+            const percent = Math.round((i / totalPages) * 100);
+            progressBar.style.width = percent + "%";
+            progressBar.innerText = `Extracting pages: ${percent}%`;
+            await new Promise(r => setTimeout(r, 0));
           }
-
-          fullText += pageText + " ";
-
-          // Update progress bar and yield
-          const percent = Math.round((i / totalPages) * 100);
-          progressBar.style.width = percent + "%";
-          progressBar.innerText = `Extracting pages: ${percent}%`;
-          await new Promise(r => setTimeout(r, 0)); // allow UI to refresh
         })()
       );
     }
 
-    // Wait for batch to finish
-    await Promise.allSettled(batchPages);
+    await Promise.allSettled(batchTasks);
   }
 
-  // Hide overlay when done
   overlay.style.display = "none";
-
   return fullText.trim();
 }
+
+
 
 
 // ==========================
