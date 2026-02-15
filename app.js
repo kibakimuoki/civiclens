@@ -44,7 +44,6 @@ processBtn.addEventListener("click", async () => {
   progressBar.innerText = "0%";
   status.innerText = "Loading AI model...";
 
-  // Load AI summarizer safely
   if (!summarizer) {
     try {
       summarizer = await pipeline("summarization", "Xenova/t5-small");
@@ -52,7 +51,7 @@ processBtn.addEventListener("click", async () => {
       status.innerText = "AI model loaded.";
     } catch (err) {
       console.warn("AI model failed to load:", err);
-      status.innerText = "AI model failed. Summaries will use fallback text.";
+      status.innerText = "AI model failed. Using fallback summaries.";
       summarizer = null;
     }
   }
@@ -74,7 +73,9 @@ processBtn.addEventListener("click", async () => {
         continue;
       }
 
-      const cleaned = cleanText(cleanExtractedText(rawText));
+      let cleaned = cleanExtractedText(rawText);
+      cleaned = cleanText(cleaned);
+      cleaned = normalizeBillStructure(cleaned);
 
       const structured = await analyzeDocument(cleaned, file.name);
       displayResult(structured);
@@ -93,7 +94,7 @@ processBtn.addEventListener("click", async () => {
 });
 
 // ==========================
-// EXTRACT TEXT (PDF + TXT) with OCR + TIMEOUT
+// EXTRACT TEXT (PDF + TXT) with OCR
 // ==========================
 async function extractText(file) {
   if (file.type !== "application/pdf") {
@@ -106,7 +107,7 @@ async function extractText(file) {
   let fullText = "";
   let ocrPagesUsed = 0;
   const MAX_OCR_PAGES = 5;
-  const MAX_TOTAL_CHARS = 6000;
+  const MAX_TOTAL_CHARS = 8000;
 
   for (let i = 1; i <= pdf.numPages; i++) {
     try {
@@ -114,26 +115,19 @@ async function extractText(file) {
       const content = await page.getTextContent();
       let pageText = content.items.map(item => item.str).join(" ").trim();
 
-      // If almost no selectable text → use OCR
       if (pageText.length < 50 && ocrPagesUsed < MAX_OCR_PAGES) {
-        console.log("Running OCR on page", i);
         ocrPagesUsed++;
-
         const viewport = page.getViewport({ scale: 1.2 });
         const canvas = document.createElement("canvas");
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-
         const ctx = canvas.getContext("2d");
         await page.render({ canvasContext: ctx, viewport }).promise;
-
         const ocr = await Tesseract.recognize(canvas, "eng");
         pageText = ocr.data.text.trim();
       }
 
       fullText += pageText + " ";
-
-      // Stop early if we already have enough text
       if (fullText.length > MAX_TOTAL_CHARS) break;
 
       const percent = Math.round((i / pdf.numPages) * 100);
@@ -148,16 +142,46 @@ async function extractText(file) {
   return fullText.trim();
 }
 
+// ==========================
+// STRONG OCR CLEANING
+// ==========================
+function cleanExtractedText(text) {
+  if (!text) return "";
+
+  text = text.replace(/[^\x00-\x7F]/g, " ");
+  text = text.replace(/\s+/g, " ");
+  text = text.replace(/([A-Z]\s){5,}/g, "");
+  text = text.replace(/[,.;:'"`]{3,}/g, "");
+  text = text.replace(/SPECIAL ISSUE.*?BILLS, 2025/gi, "");
+  text = text.replace(/ARRANGEMENT OF CLAUSES.*?PART I/gi, "");
+  text = text.replace(/FIRST SCHEDULE.*?/gi, "");
+  text = text.replace(/SECOND SCHEDULE.*?/gi, "");
+  return text.trim();
+}
 
 // ==========================
-// CLEAN TEXT
+// NORMALIZE BILL STRUCTURE
+// ==========================
+function normalizeBillStructure(text) {
+  if (!text) return "";
+
+  const objectsMatch = text.match(/OBJECTS AND REASONS[\s\S]{0,2000}/i);
+  if (objectsMatch) return objectsMatch[0];
+
+  const billMatch = text.match(/A BILL[\s\S]{0,2500}/i);
+  if (billMatch) return billMatch[0];
+
+  return text;
+}
+
+// ==========================
+// BASIC CLEANING
 // ==========================
 function cleanText(text) {
   if (!text) return "";
   text = text.replace(/(\d+)\s+t\s+h/gi, "$1th");
   text = text.replace(/Disclaimer\s*:\s*The electronic version[^.]+\./gi, "");
   text = text.replace(/\s{2,}/g, " ");
-  text = text.replace(/(\r\n|\n|\r)/gm, " ");
   return text.trim();
 }
 
@@ -169,28 +193,32 @@ async function analyzeDocument(text, filename) {
   const date = extractDate(text) || "Not detected";
   const sector = detectSector(text);
 
-  let summary = text.length > 0 ? text.substring(0, 300) + "..." : "No summary available.";
+  let summary = text.substring(0, 300) + "...";
 
-  try {
-    let aiSummary = "";
-    if (summarizer && text && text.trim()) {
-      aiSummary = await generateSummary(text);
-    } else {
-      aiSummary = text.substring(0, 300) + "...";
+  if (text.length > 200 && summarizer) {
+    try {
+      const aiSummary = await generateSummary(text);
+      if (aiSummary && aiSummary.length > 40) {
+        summary = aiSummary;
+      }
+    } catch {
+      summary = text.substring(0, 300) + "...";
     }
-    if (aiSummary && aiSummary.length > 10) summary = aiSummary;
-  } catch (err) {
-    console.warn("Summary failed, using fallback.", err);
   }
 
-  return { title, date, sector, summary, fullText: text.substring(0, 8000) };
+  return {
+    title,
+    date,
+    sector,
+    summary,
+    fullText: text.substring(0, 8000)
+  };
 }
 
 // ==========================
-// DATE & SECTOR DETECTION
+// DATE & SECTOR
 // ==========================
 function extractDate(text) {
-  if (!text) return null;
   const patterns = [
     /\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
     /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}\b/i
@@ -203,48 +231,20 @@ function extractDate(text) {
 }
 
 function detectSector(text) {
-  if (!text) return "General Governance";
   const lower = text.toLowerCase();
-  if (lower.includes("defence") || lower.includes("security") || lower.includes("army")) return "Security";
-  if (lower.includes("finance") || lower.includes("treasury") || lower.includes("budget")) return "Finance";
+  if (lower.includes("defence") || lower.includes("security")) return "Security";
+  if (lower.includes("finance") || lower.includes("budget")) return "Finance";
   if (lower.includes("education")) return "Education";
-  if (lower.includes("environment") || lower.includes("nema")) return "Environment";
+  if (lower.includes("environment")) return "Environment";
   if (lower.includes("health")) return "Health";
   return "General Governance";
 }
 
-
-// Noise Cleaning Function
-
-function cleanExtractedText(text) {
-  if (!text) return "";
-
-  // Remove excessive spacing
-  text = text.replace(/\s+/g, " ");
-
-  // Remove common Gazette noise
-  text = text.replace(/SPECIAL ISSUE.*?BILLS, 2025/gi, "");
-  text = text.replace(/ARRANGEMENT OF CLAUSES.*?PART I/gi, "");
-  text = text.replace(/FIRST SCHEDULE.*?/gi, "");
-  text = text.replace(/SECOND SCHEDULE.*?/gi, "");
-
-  // Remove weird OCR symbols
-  text = text.replace(/[^\x00-\x7F]/g, "");
-
-  return text.trim();
-}
-
-
 // ==========================
-// AI SUMMARY (safe, fallback)
+// SAFE AI SUMMARY
 // ==========================
 async function generateSummary(text) {
-  if (!text) return "No text available to summarize.";
-
-  text = text.toString().replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
-  text = text.replace(/(Disclaimer|National Assembly Debates|Electronic version|Hansard Editor)/gi, "");
-
-  if (!summarizer) return text.substring(0, 300) + "...";
+  if (!text || !summarizer) return text.substring(0, 300) + "...";
 
   const chunkSize = 900;
   const chunks = [];
@@ -253,20 +253,34 @@ async function generateSummary(text) {
   }
 
   const summaries = [];
-  for (let index = 0; index < chunks.length; index++) {
+
+  for (let chunk of chunks) {
     try {
-      const res = await summarizer(chunks[index], { min_length: 60, max_length: 180 });
-      summaries[index] = res?.[0]?.summary_text || "";
+      const res = await summarizer(chunk, {
+        min_length: 60,
+        max_length: 150
+      });
+      summaries.push(res?.[0]?.summary_text || "");
     } catch {
-      summaries[index] = "";
+      summaries.push("");
     }
   }
 
-  return summaries.join(" ") || text.substring(0, 300) + "...";
+  return summaries.join(" ");
 }
 
 // ==========================
-// DISPLAY RESULTS
+// SAFE HTML ESCAPE
+// ==========================
+function escapeHTML(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// ==========================
+// DISPLAY RESULTS (SAFE)
 // ==========================
 function displayResult(doc) {
   document.getElementById("placeholder")?.remove();
@@ -275,18 +289,18 @@ function displayResult(doc) {
   card.className = "summary-card";
 
   card.innerHTML = `
-    <h3>${doc.title}</h3>
-    <p><strong>Date:</strong> ${doc.date}</p>
-    <p><strong>Sector:</strong> ${doc.sector}</p>
-    <p><strong>AI Summary:</strong> ${doc.summary}</p>
+    <h3>${escapeHTML(doc.title)}</h3>
+    <p><strong>Date:</strong> ${escapeHTML(doc.date)}</p>
+    <p><strong>Sector:</strong> ${escapeHTML(doc.sector)}</p>
+    <p><strong>AI Summary:</strong> ${escapeHTML(doc.summary)}</p>
     <p style="font-size: 12px; opacity: 0.7;">
-    This summary was generated using a local AI model (Xenova/t5-small).
+    This summary was generated using Xenova/t5-small.
     OCR errors or formatting noise may affect accuracy.
     </p>
 
     <details>
       <summary>View Extracted Text</summary>
-      <p>${doc.fullText}</p>
+      <p>${escapeHTML(doc.fullText)}</p>
     </details>
   `;
 
