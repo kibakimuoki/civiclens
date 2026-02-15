@@ -28,11 +28,11 @@
       </p>
       <p>
         Our AI pipeline automates scraping, summarization, classification, and indexing of parliamentary reports.
-        Users can also upload PDFs to get instant summaries in the browser.
+        Users can also upload PDFs or text files to get instant summaries in the browser.
       </p>
     </section>
 
-    <!-- Demo Section -->
+    <!-- AI Demo Section -->
     <section id="demo">
       <h2>AI in Action</h2>
       <p>Compare original Hansard text with AI-generated summary:</p>
@@ -46,18 +46,18 @@
 
     <!-- Upload Section -->
     <section id="upload">
-      <h2>Upload Your Document (PDF)</h2>
-      <input type="file" id="pdf-upload" accept="application/pdf" multiple>
-      <button id="process-pdf-btn">Process PDF</button>
-      <p>Uploaded PDFs will appear below once processed.</p>
-      <div id="uploaded-summaries"></div>
+      <h2>Upload Your Document (PDF or Text)</h2>
+      <input type="file" id="file-input" accept=".pdf,.txt" multiple>
+      <button id="process-btn">Process Uploaded Files</button>
+      <div id="uploaded-files"></div>
     </section>
 
     <!-- Summaries Section -->
     <section id="summaries">
       <h2>Recent Legislative Summaries</h2>
-      <input type="text" id="search-input" placeholder="Search by keyword, sector, or title...">
-      <div id="summaries-container"></div>
+      <div id="summaries-container">
+        <!-- AI-generated summaries will appear here -->
+      </div>
     </section>
 
     <!-- Contact Section -->
@@ -72,8 +72,27 @@
     <p>&copy; 2026 CivicLens / QEMB | Open-source AI for democratic transparency</p>
   </footer>
 
-  <!-- PDF.js library -->
-  <script src="https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.min.js"></script>
+  <!-- PDF.js Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.9.179/pdf.min.js"></script>
+  <!-- gpt4all.js library (browser LLM) -->
+  <script src="https://unpkg.com/gpt4all.js"></script>
   <script src="app.js"></script>
+  <script>
+    // Demo toggle button
+    const toggleBtn = document.getElementById('toggle-btn');
+    const demoContent = document.getElementById('demo-content');
+    let showOriginal = false;
+
+    toggleBtn.addEventListener('click', () => {
+      if (showOriginal) {
+        demoContent.innerHTML = '<p><strong>AI Summary:</strong> Deputy Speaker moves Special Motions based on committee reports, approvals of appointments, and public participation updates in plain language.</p>';
+        toggleBtn.textContent = 'Show Original Hansard';
+      } else {
+        demoContent.innerHTML = '<p><strong>Original Hansard:</strong> THAT, taking into consideration the findings of the Departmental Committee on Labour in its report on the approval hearing of a Nominee for Appointment as the Commission Secretary/Chief Executive Officer...</p>';
+        toggleBtn.textContent = 'Show AI Summary';
+      }
+      showOriginal = !showOriginal;
+    });
+  </script>
 </body>
 </html>
