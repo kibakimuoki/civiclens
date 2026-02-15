@@ -31,6 +31,16 @@
       color: white;
       line-height: 20px;
     }
+    .summary-card {
+      border: 1px solid #ccc;
+      padding: 15px;
+      margin-bottom: 15px;
+      border-radius: 8px;
+      background: #fafafa;
+    }
+    .summary-card h3 {
+      margin: 0 0 5px 0;
+    }
   </style>
 </head>
 <body>
@@ -53,7 +63,9 @@
   <hr>
 
   <h2>Recent Legislative Summaries</h2>
-  <div id="results"></div>
+  <div id="results">
+    <p id="placeholder">No legislative summaries yet. Upload and process a document above.</p>
+  </div>
 
   <!-- Load app.js -->
   <script type="module" src="app.js"></script>
