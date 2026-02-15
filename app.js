@@ -48,9 +48,14 @@ processBtn.addEventListener("click", async () => {
     try {
       status.innerText = `Processing file ${i + 1}/${totalFiles}: ${file.name}`;
       const rawText = await extractText(file, i, totalFiles);
+      console.log(`Extracted text length for ${file.name}: ${rawText.length}`);
       const cleaned = cleanText(rawText);
       const structured = await analyzeDocument(cleaned, file.name);
-      displayResult(structured);
+      if (structured.fullText && structured.fullText.trim().length > 0) {
+        displayResult(structured);
+      } else {
+        console.warn(`File ${file.name} produced no text.`);
+      }
     } catch (err) {
       console.error("Failed processing file:", file.name, err);
       status.innerText = `Error processing file: ${file.name}`;
@@ -80,7 +85,7 @@ async function extractText(file, fileIndex = 0, totalFiles = 1) {
       const content = await page.getTextContent();
       let pageText = content.items.map(item => item.str).join(" ");
 
-      // Only run OCR if pageText is empty
+      // Run OCR only if page is truly empty
       if (!pageText.trim()) {
         console.log(`Page ${i} empty, running OCR...`);
         const viewport = page.getViewport({ scale: 2 });
@@ -126,7 +131,6 @@ async function analyzeDocument(text, filename) {
   const date = extractDate(text) || "Not detected";
   const sector = detectSector(text);
 
-  // Fallback summary
   let summary = text && text.length > 0 ? text.substring(0, 300) + "..." : "No summary available.";
 
   try {
