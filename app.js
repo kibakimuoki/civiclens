@@ -1,102 +1,98 @@
-// PDF.js setup
-const pdfjsLib = window['pdfjs-dist/build/pdf'];
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.worker.min.js';
+const fileInput = document.getElementById('file-input');
+const processBtn = document.getElementById('process-btn');
+const uploadedFilesDiv = document.getElementById('uploaded-files');
+const summariesContainer = document.getElementById('summaries-container');
 
-// Load summaries from JSON
-async function loadSummaries() {
-  try {
-    const response = await fetch('summaries.json');
-    const summaries = await response.json();
-    displaySummaries(summaries, document.getElementById('summaries-container'));
-  } catch (err) {
-    console.error('Error loading summaries:', err);
-  }
-}
-
-// Display summaries in a container
-function displaySummaries(summaries, container) {
-  container.innerHTML = '';
-  summaries.forEach(doc => {
-    const card = document.createElement('div');
-    card.className = 'summary-card';
-    card.innerHTML = `
-      <h3>${doc.title}</h3>
-      <p><strong>Date:</strong> ${doc.date || 'N/A'}</p>
-      <p><strong>Sector:</strong> ${doc.sector || 'N/A'}</p>
-      <p>${doc.summary}</p>
-      <a href="${doc.source_file || '#'}" target="_blank">View Source</a>
-    `;
-    container.appendChild(card);
-  });
-}
-
-// Search functionality
-document.getElementById('search-input').addEventListener('input', (e) => {
-  const query = e.target.value.toLowerCase();
-  fetch('summaries.json')
-    .then(res => res.json())
-    .then(summaries => {
-      const filtered = summaries.filter(s => 
-        s.title.toLowerCase().includes(query) ||
-        (s.sector && s.sector.toLowerCase().includes(query)) ||
-        (s.keywords && s.keywords.join(' ').toLowerCase().includes(query))
-      );
-      displaySummaries(filtered, document.getElementById('summaries-container'));
-    });
-});
-
-// Demo toggle button
-const toggleBtn = document.getElementById('toggle-btn');
-const demoContent = document.getElementById('demo-content');
-let showOriginal = false;
-
-toggleBtn.addEventListener('click', () => {
-  if (showOriginal) {
-    demoContent.innerHTML = '<p><strong>AI Summary:</strong> Deputy Speaker moves Special Motions based on committee reports, approvals of appointments, and public participation updates in plain language.</p>';
-    toggleBtn.textContent = 'Show Original Hansard';
-  } else {
-    demoContent.innerHTML = '<p><strong>Original Hansard:</strong> THAT, taking into consideration the findings of the Departmental Committee on Labour in its report on the approval hearing of a Nominee for Appointment...</p>';
-    toggleBtn.textContent = 'Show AI Summary';
-  }
-  showOriginal = !showOriginal;
-});
-
-// Handle PDF upload
 let uploadedFiles = [];
-document.getElementById('pdf-upload').addEventListener('change', (e) => {
+
+// Read files
+fileInput.addEventListener('change', (e) => {
   uploadedFiles = Array.from(e.target.files);
+  uploadedFilesDiv.innerHTML = '';
+  uploadedFiles.forEach(file => {
+    const fileDiv = document.createElement('div');
+    fileDiv.textContent = `✅ ${file.name}`;
+    uploadedFilesDiv.appendChild(fileDiv);
+  });
 });
 
-// Process uploaded PDFs
-document.getElementById('process-pdf-btn').addEventListener('click', async () => {
-  const container = document.getElementById('uploaded-summaries');
-  container.innerHTML = '';
-  for (let file of uploadedFiles) {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+// Helper: extract text from PDF
+async function extractPdfText(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const strings = content.items.map(item => item.str);
+    text += strings.join(' ') + '\n\n';
+  }
+  return text;
+}
 
-    let fullText = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      const pageText = content.items.map(item => item.str).join(' ');
-      fullText += pageText + '\n\n';
+// Helper: read text file
+async function readTextFile(file) {
+  return await file.text();
+}
+
+// AI summarization function (using gpt4all.js)
+async function summarizeText(text) {
+  // Initialize GPT4All model (small version for browser)
+  const gpt = new GPT4All();
+  await gpt.init({ model: 'ggml-gpt4all-j-v1.3-groovy' });
+
+  const prompt = `You are an AI legislative assistant.
+Extract key metadata (title, date, sector) if possible.
+Summarize the following parliamentary document in plain language for easy understanding:\n\n${text}`;
+
+  const summary = await gpt.prompt(prompt, { max_tokens: 500 });
+  return summary;
+}
+
+// Process uploaded files
+processBtn.addEventListener('click', async () => {
+  if (uploadedFiles.length === 0) {
+    alert('Please select files first.');
+    return;
+  }
+
+  summariesContainer.innerHTML = '<p>Processing files...</p>';
+
+  for (const file of uploadedFiles) {
+    let text = '';
+    if (file.type === 'application/pdf') {
+      text = await extractPdfText(file);
+    } else if (file.type === 'text/plain') {
+      text = await readTextFile(file);
     }
 
-    // Simple in-browser summary (first 300 chars)
-    const summaryText = fullText.length > 300 ? fullText.slice(0, 300) + '...' : fullText;
+    const summary = await summarizeText(text);
 
+    // Create card
     const card = document.createElement('div');
-    card.className = 'summary-card';
+    card.classList.add('summary-card');
     card.innerHTML = `
       <h3>${file.name}</h3>
-      <p><strong>Date:</strong> N/A</p>
-      <p><strong>Sector:</strong> N/A</p>
-      <p>${summaryText}</p>
+      <button class="toggle-full-btn">Show Full Text</button>
+      <pre class="full-text" style="display:none;">${text}</pre>
+      <p><strong>AI Summary:</strong> ${summary}</p>
     `;
-    container.appendChild(card);
-  }
-});
 
-// Initial load
-document.addEventListener('DOMContentLoaded', loadSummaries);
+    summariesContainer.appendChild(card);
+
+    const toggleBtn = card.querySelector('.toggle-full-btn');
+    const fullText = card.querySelector('.full-text');
+
+    toggleBtn.addEventListener('click', () => {
+      if (fullText.style.display === 'none') {
+        fullText.style.display = 'block';
+        toggleBtn.textContent = 'Hide Full Text';
+      } else {
+        fullText.style.display = 'none';
+        toggleBtn.textContent = 'Show Full Text';
+      }
+    });
+  }
+
+  uploadedFilesDiv.innerHTML = '';
+});
