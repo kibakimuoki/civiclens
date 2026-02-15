@@ -17,11 +17,11 @@ header nav a {
   text-decoration: none;
 }
 
-section {
-  padding: 2rem;
+h2 {
+  margin-top: 0;
 }
 
-.summary-card, .demo-card {
+.summary-card {
   border: 1px solid #ddd;
   padding: 1rem;
   margin: 1rem 0;
@@ -29,7 +29,7 @@ section {
   background: #f9f9f9;
 }
 
-.summary-card h3, .demo-card h3 {
+.summary-card h3 {
   margin-top: 0;
 }
 
@@ -38,10 +38,17 @@ section {
   text-decoration: none;
 }
 
+.demo-card {
+  border: 1px solid #3498db;
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 5px;
+  background: #eaf2f8;
+}
+
 #search-input {
+  width: 100%;
   padding: 0.5rem;
   margin-bottom: 1rem;
-  width: 100%;
-  max-width: 400px;
   box-sizing: border-box;
 }
