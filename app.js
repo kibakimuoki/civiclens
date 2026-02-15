@@ -4,7 +4,7 @@ let summaries = [];
 // Load default dataset
 async function loadDataset() {
   try {
-    const response = await fetch('civiclens_dataset.json');
+    const response = await fetch('summaries.json');
     const data = await response.json();
     summaries.push(...data);
     displaySummaries(summaries);
