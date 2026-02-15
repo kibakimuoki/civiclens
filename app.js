@@ -14,6 +14,7 @@ let summarizer = null;
 fileInput.addEventListener("change", (e) => {
   uploadedFiles = Array.from(e.target.files);
   status.innerText = uploadedFiles.length + " file(s) ready.";
+  console.log("Files uploaded:", uploadedFiles);
 });
 
 // ==========================
@@ -25,21 +26,29 @@ processBtn.addEventListener("click", async () => {
     return;
   }
 
-  status.innerText = "Loading AI model (first time takes ~20 seconds)...";
+  status.innerText = "Loading AI model (first time takes ~20s)...";
+
   if (!summarizer) {
-    summarizer = await pipeline("summarization", "Xenova/t5-small");
+    try {
+      summarizer = await pipeline("summarization", "Xenova/t5-small");
+    } catch (err) {
+      status.innerText = "Failed to load AI model: " + err.message;
+      return;
+    }
   }
 
   status.innerText = "Processing documents...";
 
   for (let file of uploadedFiles) {
     try {
+      console.log("Processing file:", file.name);
       const rawText = await extractText(file);
       const cleaned = cleanText(rawText);
       const structured = await analyzeDocument(cleaned, file.name);
       displayResult(structured);
     } catch (err) {
       console.error("Failed processing file:", file.name, err);
+      status.innerText = `Error processing file: ${file.name}`;
     }
   }
 
@@ -54,7 +63,7 @@ processBtn.addEventListener("click", async () => {
 async function extractText(file) {
   if (file.type === "application/pdf") {
     const buffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+    const pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
 
     let fullText = "";
 
@@ -63,7 +72,7 @@ async function extractText(file) {
       const content = await page.getTextContent();
       let pageText = content.items.map(item => item.str).join(" ");
 
-      // If no text found, try OCR
+      // OCR fallback if page has no text
       if (!pageText.trim()) {
         const viewport = page.getViewport({ scale: 2 });
         const canvas = document.createElement("canvas");
