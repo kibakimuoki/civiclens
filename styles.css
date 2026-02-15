@@ -1,1 +1,30 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+header {
+  background: #2c3e50;
+  color: #fff;
+  padding: 1rem;
+  text-align: center;
+}
+
+.summary-card {
+  border: 1px solid #ddd;
+  padding: 1rem;
+  margin: 1rem;
+  border-radius: 5px;
+  background: #f9f9f9;
+}
+
+.summary-card h2 {
+  margin-top: 0;
+}
+
+.summary-card a {
+  color: #3498db;
+  text-decoration: none;
+}
 
