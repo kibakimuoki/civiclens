@@ -46,7 +46,8 @@ processBtn.addEventListener("click", async () => {
 
   if (!summarizer) {
     try {
-      summarizer = await pipeline("summarization", "Xenova/t5-small");
+      summarizer = await pipeline("summarization", "Xenova/distilbart-cnn-6-6");
+
       if (!summarizer) throw new Error("AI model failed to load");
       status.innerText = "AI model loaded.";
     } catch (err) {
@@ -257,7 +258,7 @@ function detectSector(text) {
 async function generateSummary(text) {
   if (!text || !summarizer) return text.substring(0, 300) + "...";
 
-  const chunkSize = 900;
+  const chunkSize = 700;
   const chunks = [];
   for (let i = 0; i < text.length; i += chunkSize) {
     chunks.push(text.slice(i, i + chunkSize));
@@ -268,8 +269,9 @@ async function generateSummary(text) {
   for (let chunk of chunks) {
     try {
       const res = await summarizer(chunk, {
-        min_length: 60,
-        max_length: 150
+        min_length: 80,
+        max_length: 200
+        do_sample: false
       });
       summaries.push(res?.[0]?.summary_text || "");
     } catch {
