@@ -283,31 +283,32 @@ function detectSector(text) {
 // SAFE AI SUMMARY
 // ==========================
 async function generateSummary(text) {
-  if (!text || !summarizer) return text.substring(0, 300) + "...";
-
-  const chunkSize = 700;
-  const chunks = [];
-  for (let i = 0; i < text.length; i += chunkSize) {
-    chunks.push(text.slice(i, i + chunkSize));
+  if (!text || !summarizer) {
+    return text.substring(0, 300) + "...";
   }
 
-  const summaries = [];
+  try {
+    // DistilBART works best with smaller chunks
+    const input = text.slice(0, 2000);
 
-  for (let chunk of chunks) {
-    try {
-      const res = await summarizer(chunk, {
-        min_length: 80,
-        max_length: 200,
-        do_sample: false
-      });
-      summaries.push(res?.[0]?.generated_text || "");
-    } catch {
-      summaries.push("");
-    }
+    const result = await summarizer(input, {
+      max_new_tokens: 180,
+      min_length: 60,
+      do_sample: false
+    });
+
+    return (
+      result?.[0]?.generated_text ||
+      result?.[0]?.summary_text ||
+      text.substring(0, 300) + "..."
+    );
+
+  } catch (err) {
+    console.warn("Summarization failed:", err);
+    return text.substring(0, 300) + "...";
   }
-
-  return summaries.join(" ");
 }
+
 
 // ==========================
 // SAFE HTML ESCAPE
