@@ -47,8 +47,9 @@
     <!-- Upload Section -->
     <section id="upload">
       <h2>Upload Your Document (PDF)</h2>
-      <input type="file" id="pdf-upload" accept=".pdf" multiple>
-      <p>Uploaded PDFs will be summarized and appear below.</p>
+      <input type="file" id="pdf-upload" accept="application/pdf" multiple>
+      <button id="process-pdf-btn">Process PDF</button>
+      <p>Uploaded PDFs will appear below once processed.</p>
       <div id="uploaded-summaries"></div>
     </section>
 
@@ -71,8 +72,8 @@
     <p>&copy; 2026 CivicLens / QEMB | Open-source AI for democratic transparency</p>
   </footer>
 
-  <!-- PDF.js Library -->
-  <script src="https://mozilla.github.io/pdf.js/build/pdf.js"></script>
+  <!-- PDF.js library -->
+  <script src="https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
