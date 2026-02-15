@@ -49,15 +49,23 @@ processBtn.addEventListener("click", async () => {
       status.innerText = `Processing file ${i + 1}/${totalFiles}: ${file.name}`;
       const rawText = await extractText(file, i, totalFiles);
       console.log(`Extracted text length for ${file.name}:`, rawText.length);
+      console.log(rawText.slice(0, 500)); // preview first 500 characters
+
+      if (!rawText || !rawText.trim()) {
+        displayResult({
+          title: file.name,
+          date: "Unknown",
+          sector: "Unknown",
+          summary: "Failed to extract text from this file.",
+          fullText: ""
+        });
+        continue;
+      }
 
       const cleaned = cleanText(rawText);
       const structured = await analyzeDocument(cleaned, file.name);
+      displayResult(structured);
 
-      if (structured.fullText && structured.fullText.trim().length > 0) {
-        displayResult(structured);
-      } else {
-        console.warn(`File ${file.name} produced no text.`);
-      }
     } catch (err) {
       console.error("Failed processing file:", file.name, err);
       status.innerText = `Error processing file: ${file.name}`;
@@ -74,12 +82,12 @@ processBtn.addEventListener("click", async () => {
 });
 
 // ==========================
-// TEXT EXTRACTION (PDF/TXT)
+// TEXT EXTRACTION
 // ==========================
 async function extractText(file, fileIndex = 0, totalFiles = 1) {
   if (file.type === "application/pdf") {
     const buffer = await file.arrayBuffer();
-    const pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
     let fullText = "";
 
     for (let i = 1; i <= pdf.numPages; i++) {
@@ -87,7 +95,7 @@ async function extractText(file, fileIndex = 0, totalFiles = 1) {
       const content = await page.getTextContent();
       let pageText = content.items.map(item => item.str).join(" ").trim();
 
-      // Only use OCR if page text is truly empty
+      // Only use OCR if page is truly empty
       if (!pageText) {
         console.log(`Page ${i} empty, running OCR...`);
         const viewport = page.getViewport({ scale: 2 });
@@ -97,14 +105,16 @@ async function extractText(file, fileIndex = 0, totalFiles = 1) {
         const context = canvas.getContext("2d");
         await page.render({ canvasContext: context, viewport }).promise;
 
+        document.body.appendChild(canvas); // attach canvas temporarily
         try {
           const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
           const ocrText = text.trim();
-          if (ocrText) pageText = ocrText; // Only replace if OCR returned text
+          if (ocrText) pageText = ocrText;
           console.log(`OCR text length: ${ocrText.length}`);
         } catch (err) {
           console.warn(`OCR failed for page ${i}:`, err);
         }
+        document.body.removeChild(canvas);
       }
 
       fullText += pageText + " ";
