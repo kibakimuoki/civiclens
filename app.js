@@ -270,7 +270,7 @@ async function generateSummary(text) {
     try {
       const res = await summarizer(chunk, {
         min_length: 80,
-        max_length: 200
+        max_length: 200,
         do_sample: false
       });
       summaries.push(res?.[0]?.summary_text || "");
@@ -307,7 +307,8 @@ function displayResult(doc) {
     <p><strong>Sector:</strong> ${escapeHTML(doc.sector)}</p>
     <p><strong>AI Summary:</strong> ${escapeHTML(doc.summary)}</p>
     <p style="font-size: 12px; opacity: 0.7;">
-    This summary was generated using Xenova/t5-small.
+    
+    This summary was generated using Xenova/distilbart-cnn-6-6.
     OCR errors or formatting noise may affect accuracy.
     </p>
 
