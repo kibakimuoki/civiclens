@@ -45,7 +45,7 @@ processBtn.addEventListener("click", async () => {
     const file = uploadedFiles[i];
     try {
       status.innerText = `Processing file ${i + 1}/${uploadedFiles.length}: ${file.name}`;
-      const rawText = await extractText(file, i, uploadedFiles.length);
+      const rawText = await extractText(file);
       console.log(`Extracted text length for ${file.name}:`, rawText.length);
 
       if (!rawText || !rawText.trim()) {
@@ -77,51 +77,49 @@ processBtn.addEventListener("click", async () => {
 });
 
 // ==========================
-// TEXT EXTRACTION (PDF + TXT)
+// EXTRACT TEXT (PDF + TXT) with OCR
 // ==========================
-async function extractText(file, fileIndex = 0, totalFiles = 1) {
-  if (file.type === "application/pdf") {
-    const buffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-    let fullText = "";
-    let stepCounter = 0;
-    const totalSteps = pdf.numPages;
+async function extractText(file) {
+  if (file.type !== "application/pdf") return await file.text();
 
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      let pageText = content.items.map(item => item.str).join(" ").trim();
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  let fullText = "";
+  const totalPages = pdf.numPages;
 
-      if (!pageText || pageText.length < 50) {
-        const viewport = page.getViewport({ scale: 2 });
-        const canvas = document.createElement("canvas");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        const context = canvas.getContext("2d");
+  for (let i = 1; i <= totalPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    let pageText = content.items.map(item => item.str).join(" ").trim();
 
-        await page.render({ canvasContext: context, viewport }).promise;
+    // OCR for empty or short pages
+    if (!pageText || pageText.length < 50) {
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const context = canvas.getContext("2d");
+      await page.render({ canvasContext: context, viewport }).promise;
 
-        try {
-          const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
-          pageText = text.trim();
-        } catch (err) {
-          console.warn(`OCR failed for page ${i}:`, err);
-        }
+      try {
+        const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
+        pageText = text.trim();
+      } catch (err) {
+        console.warn(`OCR failed for page ${i}:`, err);
       }
-
-      fullText += pageText + " ";
-
-      // update progress per page
-      stepCounter++;
-      const percent = Math.round((stepCounter / totalSteps) * 100);
-      progressBar.style.width = percent + "%";
-      progressBar.innerText = `Extracting pages: ${percent}%`;
     }
 
-    return fullText.trim();
-  } else {
-    return await file.text();
+    fullText += pageText + " ";
+
+    // yield to browser for UI update
+    await new Promise(r => setTimeout(r, 0));
+
+    const percent = Math.round((i / totalPages) * 100);
+    progressBar.style.width = percent + "%";
+    progressBar.innerText = `Extracting pages: ${percent}%`;
   }
+
+  return fullText.trim();
 }
 
 // ==========================
@@ -143,7 +141,7 @@ async function analyzeDocument(text, filename) {
   const date = extractDate(text) || "Not detected";
   const sector = detectSector(text);
 
-  let summary = text && text.length > 0 ? text.substring(0, 300) + "..." : "No summary available.";
+  let summary = text.length > 0 ? text.substring(0, 300) + "..." : "No summary available.";
 
   try {
     const aiSummary = await generateSummary(text);
@@ -181,14 +179,14 @@ function detectSector(text) {
 }
 
 // ==========================
-// AI SUMMARY (fixed)
+// AI SUMMARY (safe, async, freeze-proof)
 // ==========================
 async function generateSummary(text) {
   text = text.replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
   text = text.replace(/(Disclaimer|National Assembly Debates|Electronic version|Hansard Editor)/gi, "");
 
+  const chunkSize = 400;
   const chunks = [];
-  const chunkSize = 500; // safer for T5-small
   for (let i = 0; i < text.length; i += chunkSize) {
     chunks.push(text.slice(i, i + chunkSize));
   }
@@ -200,23 +198,21 @@ async function generateSummary(text) {
   const summaryPromises = chunks.map(async (chunk, index) => {
     try {
       const res = await summarizer(chunk, { min_length: 50, max_length: 130 });
-      stepCounter++;
-      const percent = Math.round((stepCounter / totalSteps) * 100);
-      progressBar.style.width = percent + "%";
-      progressBar.innerText = `Summarizing: ${percent}%`;
-      return res?.[0]?.summary_text || "";
+      summaries[index] = res?.[0]?.summary_text || "";
     } catch (err) {
-      console.warn(`Summary failed for chunk ${index}:`, err);
+      console.warn(`Summary failed for chunk ${index}`, err);
+      summaries[index] = "";
+    } finally {
       stepCounter++;
       const percent = Math.round((stepCounter / totalSteps) * 100);
       progressBar.style.width = percent + "%";
       progressBar.innerText = `Summarizing: ${percent}%`;
-      return "";
+      await new Promise(r => setTimeout(r, 0));
     }
   });
 
-  const results = await Promise.allSettled(summaryPromises);
-  return results.map(r => r.status === "fulfilled" ? r.value : "").join(" ");
+  await Promise.allSettled(summaryPromises);
+  return summaries.join(" ");
 }
 
 // ==========================
