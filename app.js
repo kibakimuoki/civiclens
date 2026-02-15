@@ -166,11 +166,29 @@ function cleanExtractedText(text) {
 function normalizeBillStructure(text) {
   if (!text) return "";
 
-  // Remove common header junk
-  text = text.replace(/REPUBLIC OF KENYA[\s\S]{0,300}/i, "");
-  text = text.replace(/NATIONAL ASSEMBLY RECEIVED[\s\S]{0,200}/i, "");
-  text = text.replace(/DIRECTOR LEGAL SERVICES[\s\S]{0,200}/i, "");
-  text = text.replace(/NAIROBI[,.\s\d-]+/i, "");
+  // Break into lines for stronger filtering
+  let lines = text.split(/\r?\n/);
+
+  lines = lines.filter(line => {
+    const l = line.trim();
+
+    if (!l) return false;
+
+    // Remove registry / stamp junk
+    if (/NATIONAL ASSEMBLY RECEIVED/i.test(l)) return false;
+    if (/DIRECTOR LEGAL SERVICES/i.test(l)) return false;
+    if (/P\.?\s?O\.?\s?Box/i.test(l)) return false;
+    if (/REPUBLIC OF KENYA/i.test(l)) return false;
+    if (/NAIROBI/i.test(l)) return false;
+
+    // Remove lines with too many numbers or symbols (OCR garbage)
+    const letters = (l.match(/[a-zA-Z]/g) || []).length;
+    if (letters < 15) return false;
+
+    return true;
+  });
+
+  text = lines.join("\n");
 
   // Prefer OBJECTS AND REASONS section
   const objectsMatch = text.match(/OBJECTS AND REASONS[\s\S]{300,4000}/i);
@@ -188,9 +206,10 @@ function normalizeBillStructure(text) {
   const orderMatch = text.match(/ORDER OF BUSINESS[\s\S]{300,4000}/i);
   if (orderMatch) return orderMatch[0];
 
-  // Fallback
+  // Fallback (skip first 300 characters of junk)
   return text.substring(300, 3500);
 }
+
 
 
 
