@@ -44,14 +44,16 @@ processBtn.addEventListener("click", async () => {
   progressBar.innerText = "0%";
   status.innerText = "Loading AI model...";
 
-  // Load summarization model if not already loaded
+  // Load summarization model safely
   if (!summarizer) {
     try {
+      status.innerText = "Loading AI model (T5-small)...";
       summarizer = await pipeline("summarization", "Xenova/t5-small");
+      if (!summarizer) throw new Error("Summarizer pipeline returned null");
     } catch (err) {
-      status.innerText = "Failed to load AI model: " + err.message;
-      console.error("Model load failed:", err);
-      return;
+      console.warn("Model failed to load:", err);
+      status.innerText = "AI model failed to load. Summaries will use fallback text.";
+      summarizer = null; // proceed without AI summarization
     }
   }
 
@@ -103,15 +105,11 @@ async function extractText(file) {
   const totalPages = pdf.numPages;
 
   const overlay = document.getElementById("overlay");
-  overlay.style.display = "block";
+  if (overlay) overlay.style.display = "block";
 
   const BATCH_SIZE = 3;
-
   const withTimeout = (promise, ms = 8000) =>
-    Promise.race([
-      promise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), ms))
-    ]);
+    Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), ms))]);
 
   for (let batchStart = 1; batchStart <= totalPages; batchStart += BATCH_SIZE) {
     const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, totalPages);
@@ -128,9 +126,7 @@ async function extractText(file) {
               try {
                 const content = await withTimeout(page.getTextContent());
                 pageText = content.items.map(item => item.str).join(" ").trim();
-              } catch {
-                pageText = "";
-              }
+              } catch {}
 
               if (!pageText || pageText.length < 10) {
                 try {
@@ -139,7 +135,6 @@ async function extractText(file) {
                   canvas.width = viewport.width;
                   canvas.height = viewport.height;
                   const ctx = canvas.getContext("2d");
-
                   await withTimeout(page.render({ canvasContext: ctx, viewport }).promise);
 
                   const ocr = await withTimeout(Tesseract.recognize(canvas, "eng"));
@@ -167,7 +162,7 @@ async function extractText(file) {
     await Promise.allSettled(batchTasks);
   }
 
-  overlay.style.display = "none";
+  if (overlay) overlay.style.display = "none";
   return fullText.trim();
 }
 
@@ -231,13 +226,14 @@ function detectSector(text) {
 }
 
 // ==========================
-// AI SUMMARY (chunked, safe)
+// AI SUMMARY (safe, fallback)
 // ==========================
 async function generateSummary(text) {
   if (!text) return "No text available to summarize.";
-
-  text = text.replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
+  text = text.toString().replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
   text = text.replace(/(Disclaimer|National Assembly Debates|Electronic version|Hansard Editor)/gi, "");
+
+  if (!summarizer) return text.substring(0, 300) + "..."; // fallback
 
   const chunkSize = 400;
   const chunks = [];
@@ -249,13 +245,11 @@ async function generateSummary(text) {
   let stepCounter = 0;
   const totalSteps = chunks.length;
 
-  const summaryPromises = chunks.map(async (chunk, index) => {
-    if (!summarizer) return "";
+  await Promise.allSettled(chunks.map(async (chunk, index) => {
     try {
       const res = await summarizer(chunk, { min_length: 50, max_length: 130 });
       summaries[index] = res?.[0]?.summary_text || "";
-    } catch (err) {
-      console.warn(`Summary failed for chunk ${index}`, err);
+    } catch {
       summaries[index] = "";
     } finally {
       stepCounter++;
@@ -264,10 +258,9 @@ async function generateSummary(text) {
       progressBar.innerText = `Summarizing: ${percent}%`;
       await new Promise(r => setTimeout(r, 0));
     }
-  });
+  }));
 
-  await Promise.allSettled(summaryPromises);
-  return summaries.join(" ");
+  return summaries.join(" ") || text.substring(0, 300) + "...";
 }
 
 // ==========================
