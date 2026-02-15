@@ -74,7 +74,8 @@ processBtn.addEventListener("click", async () => {
         continue;
       }
 
-      const cleaned = cleanText(rawText);
+      const cleaned = cleanText(cleanExtractedText(rawText));
+
       const structured = await analyzeDocument(cleaned, file.name);
       displayResult(structured);
 
@@ -212,6 +213,7 @@ function detectSector(text) {
   return "General Governance";
 }
 
+
 // Noise Cleaning Function
 
 function cleanExtractedText(text) {
@@ -244,7 +246,7 @@ async function generateSummary(text) {
 
   if (!summarizer) return text.substring(0, 300) + "...";
 
-  const chunkSize = 400;
+  const chunkSize = 900;
   const chunks = [];
   for (let i = 0; i < text.length; i += chunkSize) {
     chunks.push(text.slice(i, i + chunkSize));
@@ -253,7 +255,7 @@ async function generateSummary(text) {
   const summaries = [];
   for (let index = 0; index < chunks.length; index++) {
     try {
-      const res = await summarizer(chunks[index], { min_length: 50, max_length: 130 });
+      const res = await summarizer(chunks[index], { min_length: 60, max_length: 180 });
       summaries[index] = res?.[0]?.summary_text || "";
     } catch {
       summaries[index] = "";
@@ -277,6 +279,11 @@ function displayResult(doc) {
     <p><strong>Date:</strong> ${doc.date}</p>
     <p><strong>Sector:</strong> ${doc.sector}</p>
     <p><strong>AI Summary:</strong> ${doc.summary}</p>
+    <p style="font-size: 12px; opacity: 0.7;">
+    This summary was generated using a local AI model (Xenova/t5-small).
+    OCR errors or formatting noise may affect accuracy.
+    </p>
+
     <details>
       <summary>View Extracted Text</summary>
       <p>${doc.fullText}</p>
