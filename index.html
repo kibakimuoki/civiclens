@@ -47,7 +47,16 @@
     <!-- Summaries Section -->
     <section id="summaries">
       <h2>Recent Legislative Summaries</h2>
-      <!-- Summaries will be injected here by app.js -->
+      
+      <div id="controls">
+        <input type="file" id="fileUpload" multiple accept=".txt,.json">
+        <input type="text" id="searchBox" placeholder="Search summaries...">
+        <button id="processBtn">Process Documents</button>
+      </div>
+
+      <div id="summary-cards">
+        <!-- Summaries will appear here -->
+      </div>
     </section>
 
     <!-- Contact Section -->
@@ -63,22 +72,5 @@
   </footer>
 
   <script src="app.js"></script>
-  <script>
-    // Demo toggle button
-    const toggleBtn = document.getElementById('toggle-btn');
-    const demoContent = document.getElementById('demo-content');
-    let showOriginal = false;
-
-    toggleBtn.addEventListener('click', () => {
-      if (showOriginal) {
-        demoContent.innerHTML = '<p><strong>AI Summary:</strong> Deputy Speaker moves Special Motions based on committee reports, approvals of appointments, and public participation updates in plain language.</p>';
-        toggleBtn.textContent = 'Show Original Hansard';
-      } else {
-        demoContent.innerHTML = '<p><strong>Original Hansard:</strong> THAT, taking into consideration the findings of the Departmental Committee on Labour in its report on the approval hearing of a Nominee for Appointment as the Commission Secretary/Chief Executive Officer...</p>';
-        toggleBtn.textContent = 'Show AI Summary';
-      }
-      showOriginal = !showOriginal;
-    });
-  </script>
 </body>
 </html>
