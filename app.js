@@ -1,5 +1,4 @@
 import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1";
-import Tesseract from "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js";
 
 const fileInput = document.getElementById("fileInput");
 const processBtn = document.getElementById("processBtn");
@@ -27,7 +26,6 @@ processBtn.addEventListener("click", async () => {
   }
 
   status.innerText = "Loading AI model (first time takes ~20 seconds)...";
-
   if (!summarizer) {
     summarizer = await pipeline("summarization", "Xenova/t5-small");
   }
@@ -51,7 +49,7 @@ processBtn.addEventListener("click", async () => {
 });
 
 // ==========================
-// TEXT EXTRACTION (with OCR)
+// TEXT EXTRACTION (PDF/TXT)
 // ==========================
 async function extractText(file) {
   if (file.type === "application/pdf") {
@@ -63,20 +61,17 @@ async function extractText(file) {
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      let pageText = content.items.map(item => item.str).join(" ").trim();
+      let pageText = content.items.map(item => item.str).join(" ");
 
-      // If no text is found, fallback to OCR
-      if (!pageText || pageText.length < 10) {
-        // Render page to canvas
+      // If no text found, try OCR
+      if (!pageText.trim()) {
         const viewport = page.getViewport({ scale: 2 });
         const canvas = document.createElement("canvas");
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        const ctx = canvas.getContext("2d");
-        await page.render({ canvasContext: ctx, viewport }).promise;
-
-        // OCR with Tesseract
-        const { data: { text } } = await Tesseract.recognize(canvas, "eng", { logger: m => console.log(m) });
+        const context = canvas.getContext("2d");
+        await page.render({ canvasContext: context, viewport }).promise;
+        const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
         pageText = text;
       }
 
@@ -94,10 +89,10 @@ async function extractText(file) {
 // CLEAN TEXT
 // ==========================
 function cleanText(text) {
-  text = text.replace(/(\d+)\s+t\s+h/gi, "$1th"); // Fix ordinals
+  text = text.replace(/(\d+)\s+t\s+h/gi, "$1th");
   text = text.replace(/Disclaimer\s*:\s*The electronic version[^.]+\./gi, "");
-  text = text.replace(/\s{2,}/g, " "); // collapse multiple spaces
-  text = text.replace(/(\r\n|\n|\r)/gm, " "); // remove line breaks
+  text = text.replace(/\s{2,}/g, " ");
+  text = text.replace(/(\r\n|\n|\r)/gm, " ");
   return text.trim();
 }
 
@@ -117,13 +112,7 @@ async function analyzeDocument(text, filename) {
     console.warn("Summary failed:", err);
   }
 
-  return {
-    title,
-    date,
-    sector,
-    summary,
-    fullText: text.substring(0, 8000)
-  };
+  return { title, date, sector, summary, fullText: text.substring(0, 8000) };
 }
 
 // ==========================
@@ -181,26 +170,22 @@ function chunkText(text, chunkSize = 1500) {
 // AI SUMMARY
 // ==========================
 async function generateSummary(text) {
-  // Remove procedural noise
   text = text.replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
   text = text.replace(/(Disclaimer|National Assembly Debates|Electronic version|Hansard Editor)/gi, "");
 
-  const chunks = chunkText(text, 1500); // split into manageable pieces
+  const chunks = chunkText(text, 1500);
   let summaries = [];
 
   for (let c of chunks) {
     try {
       const res = await summarizer(c, { min_length: 50, max_length: 130 });
-      if (res && res[0] && res[0].summary_text) {
-        summaries.push(res[0].summary_text);
-      }
+      if (res && res[0] && res[0].summary_text) summaries.push(res[0].summary_text);
     } catch (err) {
       console.warn("Chunk summary failed:", err);
     }
   }
 
-  if (summaries.length > 0) return summaries.join(" ");
-  return "No summary available.";
+  return summaries.length > 0 ? summaries.join(" ") : "No summary available.";
 }
 
 // ==========================
