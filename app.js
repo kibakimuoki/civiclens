@@ -1,15 +1,17 @@
 import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1";
 
-// Force models to load from CDN instead of /models/
+// ==========================
+// MODEL SETTINGS
+// ==========================
 env.localModelPath = null;
 env.allowLocalModels = false;
 env.remoteModels = true;
 env.backends.onnx.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1/dist/";
 env.backends.onnx.wasm.proxy = false;
 
-
-
-
+// ==========================
+// DOM ELEMENTS
+// ==========================
 const fileInput = document.getElementById("fileInput");
 const processBtn = document.getElementById("processBtn");
 const resultsDiv = document.getElementById("results");
@@ -42,11 +44,13 @@ processBtn.addEventListener("click", async () => {
   progressBar.innerText = "0%";
   status.innerText = "Loading AI model...";
 
+  // Load summarization model if not already loaded
   if (!summarizer) {
     try {
       summarizer = await pipeline("summarization", "Xenova/t5-small");
     } catch (err) {
       status.innerText = "Failed to load AI model: " + err.message;
+      console.error("Model load failed:", err);
       return;
     }
   }
@@ -86,7 +90,7 @@ processBtn.addEventListener("click", async () => {
 });
 
 // ==========================
-// EXTRACT TEXT (PDF + TXT) with OCR + TIMEOUT FIX
+// EXTRACT TEXT (PDF + TXT) with OCR + TIMEOUT
 // ==========================
 async function extractText(file) {
   if (file.type !== "application/pdf") {
@@ -103,13 +107,10 @@ async function extractText(file) {
 
   const BATCH_SIZE = 3;
 
-  // Timeout helper
   const withTimeout = (promise, ms = 8000) =>
     Promise.race([
       promise,
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Timeout")), ms)
-      )
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), ms))
     ]);
 
   for (let batchStart = 1; batchStart <= totalPages; batchStart += BATCH_SIZE) {
@@ -117,57 +118,50 @@ async function extractText(file) {
     const batchTasks = [];
 
     for (let i = batchStart; i <= batchEnd; i++) {
-     batchTasks.push(
-  withTimeout(
-    (async () => {
-      try {
-        const page = await withTimeout(pdf.getPage(i));
+      batchTasks.push(
+        withTimeout(
+          (async () => {
+            try {
+              const page = await withTimeout(pdf.getPage(i));
 
-        let pageText = "";
-        try {
-          const content = await withTimeout(page.getTextContent());
-          pageText = content.items.map(item => item.str).join(" ").trim();
-        } catch {
-          pageText = "";
-        }
+              let pageText = "";
+              try {
+                const content = await withTimeout(page.getTextContent());
+                pageText = content.items.map(item => item.str).join(" ").trim();
+              } catch {
+                pageText = "";
+              }
 
-        if (!pageText || pageText.length < 10) {
-          try {
-            const viewport = page.getViewport({ scale: 1.3 });
-            const canvas = document.createElement("canvas");
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-            const ctx = canvas.getContext("2d");
+              if (!pageText || pageText.length < 10) {
+                try {
+                  const viewport = page.getViewport({ scale: 1.3 });
+                  const canvas = document.createElement("canvas");
+                  canvas.width = viewport.width;
+                  canvas.height = viewport.height;
+                  const ctx = canvas.getContext("2d");
 
-            await withTimeout(
-              page.render({ canvasContext: ctx, viewport }).promise
-            );
+                  await withTimeout(page.render({ canvasContext: ctx, viewport }).promise);
 
-            const ocr = await withTimeout(
-              Tesseract.recognize(canvas, "eng")
-            );
-            pageText = ocr.data.text.trim();
-          } catch (err) {
-            console.warn("OCR failed on page", i, err);
-          }
-        }
+                  const ocr = await withTimeout(Tesseract.recognize(canvas, "eng"));
+                  pageText = ocr.data.text.trim();
+                } catch (err) {
+                  console.warn("OCR failed on page", i, err);
+                }
+              }
 
-        fullText += pageText + " ";
-      } catch (err) {
-        console.warn("Page failed:", i, err);
-      } finally {
-        const percent = Math.round((i / totalPages) * 100);
-        progressBar.style.width = percent + "%";
-        progressBar.innerText = `Extracting pages: ${percent}%`;
-        await new Promise(r => setTimeout(r, 0));
-      }
-    })(),
-    10000 // 10‑second hard timeout
-  ).catch(err => {
-    console.warn("Page hard-timeout:", err);
-  })
-);
-
+              fullText += pageText + " ";
+            } catch (err) {
+              console.warn("Page failed:", i, err);
+            } finally {
+              const percent = Math.round((i / totalPages) * 100);
+              progressBar.style.width = percent + "%";
+              progressBar.innerText = `Extracting pages: ${percent}%`;
+              await new Promise(r => setTimeout(r, 0));
+            }
+          })(),
+          10000
+        ).catch(err => console.warn("Page hard-timeout:", err))
+      );
     }
 
     await Promise.allSettled(batchTasks);
@@ -181,6 +175,7 @@ async function extractText(file) {
 // CLEAN TEXT
 // ==========================
 function cleanText(text) {
+  if (!text) return "";
   text = text.replace(/(\d+)\s+t\s+h/gi, "$1th");
   text = text.replace(/Disclaimer\s*:\s*The electronic version[^.]+\./gi, "");
   text = text.replace(/\s{2,}/g, " ");
@@ -212,6 +207,7 @@ async function analyzeDocument(text, filename) {
 // DATE & SECTOR DETECTION
 // ==========================
 function extractDate(text) {
+  if (!text) return null;
   const patterns = [
     /\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
     /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}\b/i
@@ -224,6 +220,7 @@ function extractDate(text) {
 }
 
 function detectSector(text) {
+  if (!text) return "General Governance";
   const lower = text.toLowerCase();
   if (lower.includes("defence") || lower.includes("security") || lower.includes("army")) return "Security";
   if (lower.includes("finance") || lower.includes("treasury") || lower.includes("budget")) return "Finance";
@@ -234,9 +231,11 @@ function detectSector(text) {
 }
 
 // ==========================
-// AI SUMMARY (chunked)
+// AI SUMMARY (chunked, safe)
 // ==========================
 async function generateSummary(text) {
+  if (!text) return "No text available to summarize.";
+
   text = text.replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
   text = text.replace(/(Disclaimer|National Assembly Debates|Electronic version|Hansard Editor)/gi, "");
 
@@ -251,6 +250,7 @@ async function generateSummary(text) {
   const totalSteps = chunks.length;
 
   const summaryPromises = chunks.map(async (chunk, index) => {
+    if (!summarizer) return "";
     try {
       const res = await summarizer(chunk, { min_length: 50, max_length: 130 });
       summaries[index] = res?.[0]?.summary_text || "";
