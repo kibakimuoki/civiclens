@@ -149,15 +149,30 @@ function detectSector(text) {
 
 async function generateSummary(text) {
 
-  const chunk = text.slice(0, 2000);
+  // Remove early procedural noise
+  text = text.replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
 
-  const result = await summarizer(chunk, {
-    max_length: 180,
-    min_length: 60
+  // Focus on legislative action keywords
+  const importantSections = text.split(/(?=Motion|Statement|Report|Committee|inquiry|approval)/gi);
+
+  // Take most relevant sections
+  const focusedText = importantSections.slice(0, 3).join(" ");
+
+  // Trim to model-safe size
+  const trimmed = focusedText.substring(0, 1500);
+
+  if (!summarizer) {
+    await loadModel();
+  }
+
+  const result = await summarizer(trimmed, {
+    max_length: 130,
+    min_length: 50,
   });
 
   return result[0].summary_text;
 }
+
 
 // ==========================
 // DISPLAY
