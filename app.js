@@ -16,7 +16,6 @@ let summarizer = null;
 fileInput.addEventListener("change", (e) => {
   uploadedFiles = Array.from(e.target.files);
   status.innerText = uploadedFiles.length + " file(s) ready.";
-  console.log("Files uploaded:", uploadedFiles);
 });
 
 // ==========================
@@ -31,8 +30,7 @@ processBtn.addEventListener("click", async () => {
   progressContainer.style.display = "block";
   progressBar.style.width = "0%";
   progressBar.innerText = "0%";
-
-  status.innerText = "Loading AI model (first time takes ~20s)...";
+  status.innerText = "Loading AI model...";
 
   if (!summarizer) {
     try {
@@ -43,15 +41,12 @@ processBtn.addEventListener("click", async () => {
     }
   }
 
-  status.innerText = "Processing documents...";
-
   const totalFiles = uploadedFiles.length;
 
   for (let i = 0; i < totalFiles; i++) {
     const file = uploadedFiles[i];
     try {
-      console.log("Processing file:", file.name);
-      status.innerText = `Processing file ${i + 1} of ${totalFiles}: ${file.name}`;
+      status.innerText = `Processing file ${i + 1}/${totalFiles}: ${file.name}`;
       const rawText = await extractText(file, i, totalFiles);
       const cleaned = cleanText(rawText);
       const structured = await analyzeDocument(cleaned, file.name);
@@ -60,6 +55,7 @@ processBtn.addEventListener("click", async () => {
       console.error("Failed processing file:", file.name, err);
       status.innerText = `Error processing file: ${file.name}`;
     }
+
     const percent = Math.round(((i + 1) / totalFiles) * 100);
     progressBar.style.width = percent + "%";
     progressBar.innerText = percent + "%";
@@ -71,7 +67,7 @@ processBtn.addEventListener("click", async () => {
 });
 
 // ==========================
-// TEXT EXTRACTION (PDF/TXT) with per-page progress
+// TEXT EXTRACTION
 // ==========================
 async function extractText(file, fileIndex = 0, totalFiles = 1) {
   if (file.type === "application/pdf") {
@@ -84,8 +80,9 @@ async function extractText(file, fileIndex = 0, totalFiles = 1) {
       const content = await page.getTextContent();
       let pageText = content.items.map(item => item.str).join(" ");
 
-      // OCR fallback
+      // Only run OCR if pageText is empty
       if (!pageText.trim()) {
+        console.log(`Page ${i} empty, running OCR...`);
         const viewport = page.getViewport({ scale: 2 });
         const canvas = document.createElement("canvas");
         canvas.width = viewport.width;
@@ -94,17 +91,17 @@ async function extractText(file, fileIndex = 0, totalFiles = 1) {
         await page.render({ canvasContext: context, viewport }).promise;
         const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
         pageText = text;
+        console.log(`OCR result length: ${pageText.length}`);
       }
 
       fullText += pageText + " ";
 
-      // Update progress for multi-page PDFs
       const pagePercent = Math.round((i / pdf.numPages) * 100);
       progressBar.style.width = pagePercent + "%";
       progressBar.innerText = `File ${fileIndex + 1}/${totalFiles}: ${pagePercent}%`;
     }
 
-    return fullText;
+    return fullText.trim();
   } else {
     return await file.text();
   }
@@ -129,33 +126,34 @@ async function analyzeDocument(text, filename) {
   const date = extractDate(text) || "Not detected";
   const sector = detectSector(text);
 
-  // Fallback summary if AI fails
-  let summary = text.substring(0, 300) + "...";
+  // Fallback summary
+  let summary = text && text.length > 0 ? text.substring(0, 300) + "..." : "No summary available.";
 
   try {
     const aiSummary = await generateSummary(text);
     if (aiSummary && aiSummary.length > 10) summary = aiSummary;
   } catch (err) {
-    console.warn("Summary failed, using fallback:", err);
+    console.warn("Summary failed, using fallback.", err);
   }
 
   return { title, date, sector, summary, fullText: text.substring(0, 8000) };
 }
 
 // ==========================
-// DOCUMENT TYPE DETECTOR
+// DATE & SECTOR DETECTION
 // ==========================
-function detectDocumentType(text) {
-  const lower = text.toLowerCase();
-  if (lower.includes("bill") && lower.includes("amendment")) return "bill";
-  if (lower.includes("orders of the day") || lower.includes("order paper")) return "orderpaper";
-  if (lower.includes("the hansard") || lower.includes("national assembly debates")) return "hansard";
-  return "generic";
+function extractDate(text) {
+  const patterns = [
+    /\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}\b/i
+  ];
+  for (let p of patterns) {
+    const match = text.match(p);
+    if (match) return match[0];
+  }
+  return null;
 }
 
-// ==========================
-// SECTOR DETECTION
-// ==========================
 function detectSector(text) {
   const lower = text.toLowerCase();
   if (lower.includes("defence") || lower.includes("security") || lower.includes("army")) return "Security";
@@ -167,40 +165,18 @@ function detectSector(text) {
 }
 
 // ==========================
-// DATE EXTRACTION
-// ==========================
-function extractDate(text) {
-  const patterns = [
-    /\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
-    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}\b/i,
-    /\b\d{1,2}\s+(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)\s+\d{4}\b/i
-  ];
-  for (let p of patterns) {
-    const match = text.match(p);
-    if (match) return match[0];
-  }
-  return null;
-}
-
-// ==========================
-// CHUNKING HELPER
-// ==========================
-function chunkText(text, chunkSize = 1500) {
-  const chunks = [];
-  for (let i = 0; i < text.length; i += chunkSize) {
-    chunks.push(text.slice(i, i + chunkSize));
-  }
-  return chunks;
-}
-
-// ==========================
 // AI SUMMARY
 // ==========================
 async function generateSummary(text) {
   text = text.replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
   text = text.replace(/(Disclaimer|National Assembly Debates|Electronic version|Hansard Editor)/gi, "");
 
-  const chunks = chunkText(text, 1500);
+  const chunks = [];
+  const chunkSize = 1500;
+  for (let i = 0; i < text.length; i += chunkSize) {
+    chunks.push(text.slice(i, i + chunkSize));
+  }
+
   let summaries = [];
 
   for (let i = 0; i < chunks.length; i++) {
@@ -224,7 +200,6 @@ async function generateSummary(text) {
 // DISPLAY RESULTS
 // ==========================
 function displayResult(doc) {
-  // Remove placeholder if present
   document.getElementById("placeholder")?.remove();
 
   const card = document.createElement("div");
