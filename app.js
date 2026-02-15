@@ -4,22 +4,21 @@ const resultsDiv = document.getElementById("results");
 
 let uploadedFiles = [];
 
-// Store uploaded files
 fileInput.addEventListener("change", (e) => {
   uploadedFiles = Array.from(e.target.files);
-  alert(uploadedFiles.length + " file(s) ready for processing.");
+  alert(uploadedFiles.length + " file(s) ready.");
 });
 
-// Process button
 processBtn.addEventListener("click", async () => {
   if (uploadedFiles.length === 0) {
-    alert("Please upload files first.");
+    alert("Upload files first.");
     return;
   }
 
   for (let file of uploadedFiles) {
-    const text = await extractText(file);
-    const structured = analyzeDocument(text, file.name);
+    const rawText = await extractText(file);
+    const cleaned = cleanText(rawText);
+    const structured = analyzeDocument(cleaned, file.name);
     displayResult(structured);
   }
 
@@ -27,11 +26,14 @@ processBtn.addEventListener("click", async () => {
   fileInput.value = "";
 });
 
-// Extract text from PDF or TXT
+// ==========================
+// TEXT EXTRACTION
+// ==========================
+
 async function extractText(file) {
   if (file.type === "application/pdf") {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
 
     let fullText = "";
 
@@ -43,84 +45,101 @@ async function extractText(file) {
     }
 
     return fullText;
-
   } else {
     return await file.text();
   }
 }
 
-// AI-style processing
+// ==========================
+// CLEANING ENGINE
+// ==========================
+
+function cleanText(text) {
+
+  // Fix broken ordinal spacing (4 t h → 4th)
+  text = text.replace(/(\d+)\s+t\s+h/g, "$1th");
+
+  // Remove repeated Hansard disclaimers
+  text = text.replace(/Disclaimer\s*:\s*The electronic version[^.]+\./gi, "");
+
+  // Remove page number headers
+  text = text.replace(/\d+\s+December\s+\d{4}\s+NATIONAL ASSEMBLY DEBATES\s+\d+/gi, "");
+
+  // Remove multiple spaces
+  text = text.replace(/\s+/g, " ");
+
+  return text.trim();
+}
+
+// ==========================
+// ANALYSIS
+// ==========================
+
 function analyzeDocument(text, filename) {
 
-  const cleanedText = text.replace(/\s+/g, " ").trim();
+  const title = decodeURIComponent(filename.replace(/\.[^/.]+$/, ""));
 
-  const title = filename.replace(/\.[^/.]+$/, "").replace(/%20/g, " ");
-
-  const dateMatch = cleanedText.match(/\b\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i);
+  const dateMatch = text.match(/\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i);
   const date = dateMatch ? dateMatch[0] : "Not detected";
 
-  const sector = detectSector(cleanedText);
+  const sector = detectSector(text);
 
-  const summary = generateSummary(cleanedText);
+  const summary = generateSummary(text);
 
   return {
     title,
     date,
     sector,
     summary,
-    fullText: cleanedText.substring(0, 5000) // limit display
+    fullText: text.substring(0, 8000)
   };
 }
 
-// Keyword-based sector classification
+// ==========================
+// SECTOR CLASSIFICATION
+// ==========================
+
 function detectSector(text) {
   const lower = text.toLowerCase();
 
-  if (lower.includes("security") || lower.includes("defence") || lower.includes("army")) return "Security";
-  if (lower.includes("finance") || lower.includes("budget") || lower.includes("tax")) return "Finance";
-  if (lower.includes("health") || lower.includes("hospital")) return "Health";
-  if (lower.includes("environment") || lower.includes("nema")) return "Environment";
+  if (lower.includes("defence") || lower.includes("security") || lower.includes("army")) return "Security";
+  if (lower.includes("finance") || lower.includes("treasury") || lower.includes("budget")) return "Finance";
   if (lower.includes("education") || lower.includes("school")) return "Education";
+  if (lower.includes("environment") || lower.includes("nema")) return "Environment";
+  if (lower.includes("health")) return "Health";
 
   return "General Governance";
 }
 
-// Simple extractive summarizer
+// ==========================
+// IMPROVED SUMMARY ENGINE
+// ==========================
+
 function generateSummary(text) {
 
-  const sentences = text.split(". ");
-  const wordFreq = {};
-  const stopwords = ["the","and","of","to","in","that","for","on","with","as","by","is","at","this","be","are"];
+  const sentences = text.split(/(?<=\.)\s+/);
 
-  const words = text.toLowerCase().match(/\b[a-z]{4,}\b/g);
+  const ignorePhrases = [
+    "disclaimer",
+    "national assembly debates",
+    "electronic version",
+    "hansard editor"
+  ];
 
-  words.forEach(word => {
-    if (!stopwords.includes(word)) {
-      wordFreq[word] = (wordFreq[word] || 0) + 1;
-    }
+  const filtered = sentences.filter(sentence => {
+    const lower = sentence.toLowerCase();
+    return !ignorePhrases.some(phrase => lower.includes(phrase));
   });
 
-  const sentenceScores = sentences.map(sentence => {
-    let score = 0;
-    const sentenceWords = sentence.toLowerCase().match(/\b[a-z]{4,}\b/g);
-    if (!sentenceWords) return 0;
+  const important = filtered.slice(0, 8);
 
-    sentenceWords.forEach(word => {
-      if (wordFreq[word]) score += wordFreq[word];
-    });
-
-    return score;
-  });
-
-  const ranked = sentences
-    .map((s, i) => ({ sentence: s, score: sentenceScores[i] }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
-
-  return ranked.map(r => r.sentence).join(". ") + ".";
+  return important.join(" ");
 }
 
-// Display result card
+// ==========================
+// DISPLAY
+// ==========================
+
 function displayResult(doc) {
 
   const card = document.createElement("div");
