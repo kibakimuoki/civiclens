@@ -44,16 +44,16 @@ processBtn.addEventListener("click", async () => {
   progressBar.innerText = "0%";
   status.innerText = "Loading AI model...";
 
-  // Load summarization model safely
+  // Load AI summarizer safely
   if (!summarizer) {
     try {
-      status.innerText = "Loading AI model (T5-small)...";
       summarizer = await pipeline("summarization", "Xenova/t5-small");
-      if (!summarizer) throw new Error("Summarizer pipeline returned null");
+      if (!summarizer) throw new Error("AI model failed to load");
+      status.innerText = "AI model loaded.";
     } catch (err) {
-      console.warn("Model failed to load:", err);
-      status.innerText = "AI model failed to load. Summaries will use fallback text.";
-      summarizer = null; // proceed without AI summarization
+      console.warn("AI model failed to load:", err);
+      status.innerText = "AI model failed. Summaries will use fallback text.";
+      summarizer = null;
     }
   }
 
@@ -121,8 +121,8 @@ async function extractText(file) {
           (async () => {
             try {
               const page = await withTimeout(pdf.getPage(i));
-
               let pageText = "";
+
               try {
                 const content = await withTimeout(page.getTextContent());
                 pageText = content.items.map(item => item.str).join(" ").trim();
@@ -189,7 +189,12 @@ async function analyzeDocument(text, filename) {
   let summary = text.length > 0 ? text.substring(0, 300) + "..." : "No summary available.";
 
   try {
-    const aiSummary = await generateSummary(text);
+    let aiSummary = "";
+    if (summarizer && text && text.trim()) {
+      aiSummary = await generateSummary(text);
+    } else {
+      aiSummary = text.substring(0, 300) + "...";
+    }
     if (aiSummary && aiSummary.length > 10) summary = aiSummary;
   } catch (err) {
     console.warn("Summary failed, using fallback.", err);
@@ -230,10 +235,11 @@ function detectSector(text) {
 // ==========================
 async function generateSummary(text) {
   if (!text) return "No text available to summarize.";
+
   text = text.toString().replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
   text = text.replace(/(Disclaimer|National Assembly Debates|Electronic version|Hansard Editor)/gi, "");
 
-  if (!summarizer) return text.substring(0, 300) + "..."; // fallback
+  if (!summarizer) return text.substring(0, 300) + "...";
 
   const chunkSize = 400;
   const chunks = [];
@@ -242,23 +248,14 @@ async function generateSummary(text) {
   }
 
   const summaries = [];
-  let stepCounter = 0;
-  const totalSteps = chunks.length;
-
-  await Promise.allSettled(chunks.map(async (chunk, index) => {
+  for (let index = 0; index < chunks.length; index++) {
     try {
-      const res = await summarizer(chunk, { min_length: 50, max_length: 130 });
+      const res = await summarizer(chunks[index], { min_length: 50, max_length: 130 });
       summaries[index] = res?.[0]?.summary_text || "";
     } catch {
       summaries[index] = "";
-    } finally {
-      stepCounter++;
-      const percent = Math.round((stepCounter / totalSteps) * 100);
-      progressBar.style.width = percent + "%";
-      progressBar.innerText = `Summarizing: ${percent}%`;
-      await new Promise(r => setTimeout(r, 0));
     }
-  }));
+  }
 
   return summaries.join(" ") || text.substring(0, 300) + "...";
 }
