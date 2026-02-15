@@ -129,11 +129,14 @@ async function analyzeDocument(text, filename) {
   const date = extractDate(text) || "Not detected";
   const sector = detectSector(text);
 
-  let summary = "No summary available.";
+  // Fallback summary if AI fails
+  let summary = text.substring(0, 300) + "...";
+
   try {
-    summary = await generateSummary(text);
+    const aiSummary = await generateSummary(text);
+    if (aiSummary && aiSummary.length > 10) summary = aiSummary;
   } catch (err) {
-    console.warn("Summary failed:", err);
+    console.warn("Summary failed, using fallback:", err);
   }
 
   return { title, date, sector, summary, fullText: text.substring(0, 8000) };
@@ -206,7 +209,6 @@ async function generateSummary(text) {
       const res = await summarizer(c, { min_length: 50, max_length: 130 });
       if (res && res[0] && res[0].summary_text) summaries.push(res[0].summary_text);
 
-      // Update progress for summarization
       const sumPercent = Math.round(((i + 1) / chunks.length) * 100);
       progressBar.style.width = sumPercent + "%";
       progressBar.innerText = `Summarizing: ${sumPercent}%`;
@@ -215,18 +217,18 @@ async function generateSummary(text) {
     }
   }
 
-  return summaries.length > 0 ? summaries.join(" ") : "No summary available.";
+  return summaries.length > 0 ? summaries.join(" ") : "";
 }
 
 // ==========================
-// DISPLAY
+// DISPLAY RESULTS
 // ==========================
 function displayResult(doc) {
+  // Remove placeholder if present
+  document.getElementById("placeholder")?.remove();
+
   const card = document.createElement("div");
-  card.style.border = "1px solid #ccc";
-  card.style.padding = "15px";
-  card.style.marginBottom = "15px";
-  card.style.borderRadius = "8px";
+  card.className = "summary-card";
 
   card.innerHTML = `
     <h3>${doc.title}</h3>
