@@ -192,7 +192,7 @@ function normalizeBillStructure(text) {
   const orderMatch = text.match(/ORDER OF BUSINESS[\s\S]{300,4000}/i);
   if (orderMatch) return orderMatch[0];
 
-  return text.substring(300, 3500);
+  return text;
 }
 
 // ==========================
