@@ -30,9 +30,10 @@ processBtn.addEventListener("click", async () => {
 
   if (!summarizer) {
     summarizer = await window.pipeline(
-      "summarization",
-      "Xenova/distilbart-cnn-6-6"
-    );
+  "summarization",
+  "Xenova/t5-small"
+);
+
   }
 
   status.innerText = "Processing documents...";
