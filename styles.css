@@ -11,20 +11,37 @@ header {
   text-align: center;
 }
 
-nav a {
+header nav a {
   color: #fff;
   margin: 0 1rem;
   text-decoration: none;
 }
 
-.summary-card {
+section {
+  padding: 2rem;
+}
+
+.summary-card, .demo-card {
   border: 1px solid #ddd;
   padding: 1rem;
-  margin: 1rem;
+  margin: 1rem 0;
   border-radius: 5px;
   background: #f9f9f9;
 }
 
-.summary-card h3 {
+.summary-card h3, .demo-card h3 {
   margin-top: 0;
+}
+
+.summary-card a {
+  color: #3498db;
+  text-decoration: none;
+}
+
+#search-input {
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  width: 100%;
+  max-width: 400px;
+  box-sizing: border-box;
 }
