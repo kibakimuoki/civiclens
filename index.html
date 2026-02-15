@@ -13,7 +13,7 @@
     <nav>
       <a href="#about">About</a>
       <a href="#summaries">Summaries</a>
-      <a href="#demo">Demo</a>
+      <a href="#upload">Upload</a>
       <a href="#contact">Contact</a>
     </nav>
   </header>
@@ -26,43 +26,33 @@
         CivicLens transforms dense parliamentary documents into plain-language summaries.
         Journalists, civic organizations, and citizens can track legislative decisions and community impacts quickly.
       </p>
-      <p>
-        Our AI pipeline automates scraping, summarization, classification, and indexing of parliamentary reports.
-        This ensures timely, accessible, and actionable civic intelligence at scale.
-      </p>
     </section>
 
-    <!-- Demo Section -->
-    <section id="demo">
-      <h2>AI in Action</h2>
-      <p>Compare original Hansard text with AI-generated summary:</p>
-      <div class="demo-card">
-        <button id="toggle-btn">Show Original Hansard</button>
-        <div id="demo-content">
-          <p><strong>AI Summary:</strong> Deputy Speaker moves Special Motions based on committee reports, approvals of appointments, and public participation updates in plain language.</p>
-        </div>
-      </div>
+    <!-- Upload Section -->
+    <section id="upload">
+      <h2>Upload Your Document (PDF)</h2>
+      <input type="file" id="pdf-upload" accept=".pdf" multiple />
+      <p>Uploaded PDFs will be summarized and appear below.</p>
+    </section>
+
+    <!-- Search Section -->
+    <section id="search">
+      <h2>Search Summaries</h2>
+      <input type="text" id="search-box" placeholder="Search by keyword, sector, or title..." />
     </section>
 
     <!-- Summaries Section -->
     <section id="summaries">
       <h2>Recent Legislative Summaries</h2>
-      
-      <div id="controls">
-        <input type="file" id="fileUpload" multiple accept=".txt,.json">
-        <input type="text" id="searchBox" placeholder="Search summaries...">
-        <button id="processBtn">Process Documents</button>
-      </div>
-
       <div id="summary-cards">
-        <!-- Summaries will appear here -->
+        <!-- Cards appear here -->
       </div>
     </section>
 
     <!-- Contact Section -->
     <section id="contact">
       <h2>Contact / Collaborate</h2>
-      <p>Email: <a href="mailto:muokidan35@gmail.com">muokidan35@gmail.com</a></p>
+      <p>Email: <a href="mailto:info@qemb.org">info@qemb.org</a></p>
       <p>GitHub: <a href="https://github.com/kibakimuoki/civiclens" target="_blank">civiclens repository</a></p>
     </section>
   </main>
@@ -71,6 +61,7 @@
     <p>&copy; 2026 CivicLens / QEMB | Open-source AI for democratic transparency</p>
   </footer>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.9.179/pdf.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
