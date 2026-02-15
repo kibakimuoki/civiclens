@@ -1,3 +1,11 @@
+// ==========================
+// IMPORT TRANSFORMERS (CDN)
+// ==========================
+import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1";
+
+// ==========================
+// GLOBAL VARIABLES
+// ==========================
 const fileInput = document.getElementById("fileInput");
 const processBtn = document.getElementById("processBtn");
 const resultsDiv = document.getElementById("results");
@@ -9,7 +17,6 @@ let summarizer = null;
 // ==========================
 // FILE SELECTION
 // ==========================
-
 fileInput.addEventListener("change", (e) => {
   uploadedFiles = Array.from(e.target.files);
   status.innerText = uploadedFiles.length + " file(s) ready.";
@@ -18,7 +25,6 @@ fileInput.addEventListener("change", (e) => {
 // ==========================
 // PROCESS BUTTON
 // ==========================
-
 processBtn.addEventListener("click", async () => {
 
   if (uploadedFiles.length === 0) {
@@ -29,11 +35,10 @@ processBtn.addEventListener("click", async () => {
   status.innerText = "Loading AI model (first time takes ~20 seconds)...";
 
   if (!summarizer) {
-    summarizer = await window.pipeline(
-  "summarization",
-  "Xenova/t5-small"
-);
-
+    summarizer = await pipeline(
+      "summarization",
+      "Xenova/t5-small"   // loads automatically from HuggingFace CDN
+    );
   }
 
   status.innerText = "Processing documents...";
@@ -53,7 +58,6 @@ processBtn.addEventListener("click", async () => {
 // ==========================
 // TEXT EXTRACTION
 // ==========================
-
 async function extractText(file) {
 
   if (file.type === "application/pdf") {
@@ -80,7 +84,6 @@ async function extractText(file) {
 // ==========================
 // CLEAN TEXT
 // ==========================
-
 function cleanText(text) {
 
   text = text.replace(/(\d+)\s+t\s+h/g, "$1th");
@@ -93,34 +96,44 @@ function cleanText(text) {
 // ==========================
 // ANALYZE DOCUMENT
 // ==========================
-
 async function analyzeDocument(text, filename) {
 
   const title = decodeURIComponent(filename.replace(/\.[^/.]+$/, ""));
 
-  const dateMatch = text.match(
-    /\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i
-  );
-
+  const dateMatch = text.match(/\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i);
   const date = dateMatch ? dateMatch[0] : "Not detected";
 
-  const sector = detectSector(text);
+  const docType = detectDocumentType(text);
 
-  const summary = await generateSummary(text);
+  let summary = await generateSummary(text);
+
+  const sector = detectSector(text);
 
   return {
     title,
     date,
     sector,
     summary,
-    fullText: text.substring(0, 5000)
+    fullText: text.substring(0, 8000)
   };
+}
+
+// ==========================
+// DOCUMENT TYPE DETECTOR
+// ==========================
+function detectDocumentType(text) {
+  const lower = text.toLowerCase();
+
+  if (lower.includes("bill") && lower.includes("amendment")) return "bill";
+  if (lower.includes("orders of the day") || lower.includes("order paper")) return "orderpaper";
+  if (lower.includes("the hansard") || lower.includes("national assembly debates")) return "hansard";
+
+  return "generic";
 }
 
 // ==========================
 // SECTOR DETECTION
 // ==========================
-
 function detectSector(text) {
 
   const lower = text.toLowerCase();
@@ -144,26 +157,19 @@ function detectSector(text) {
 }
 
 // ==========================
-// AI SUMMARY
+// AI SUMMARY (IMPROVED)
 // ==========================
-
 async function generateSummary(text) {
 
-  // Remove early procedural noise
+  // Remove procedural noise
   text = text.replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
 
-  // Focus on legislative action keywords
+  // Focus on legislative keywords
   const importantSections = text.split(/(?=Motion|Statement|Report|Committee|inquiry|approval)/gi);
 
-  // Take most relevant sections
   const focusedText = importantSections.slice(0, 3).join(" ");
 
-  // Trim to model-safe size
   const trimmed = focusedText.substring(0, 1500);
-
-  if (!summarizer) {
-    await loadModel();
-  }
 
   const result = await summarizer(trimmed, {
     max_length: 130,
@@ -173,11 +179,9 @@ async function generateSummary(text) {
   return result[0].summary_text;
 }
 
-
 // ==========================
-// DISPLAY
+// DISPLAY RESULTS
 // ==========================
-
 function displayResult(doc) {
 
   const card = document.createElement("div");
