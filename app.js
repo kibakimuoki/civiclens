@@ -1,11 +1,5 @@
-// ==========================
-// IMPORT TRANSFORMERS (CDN)
-// ==========================
 import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1";
 
-// ==========================
-// GLOBAL VARIABLES
-// ==========================
 const fileInput = document.getElementById("fileInput");
 const processBtn = document.getElementById("processBtn");
 const resultsDiv = document.getElementById("results");
@@ -35,10 +29,7 @@ processBtn.addEventListener("click", async () => {
   status.innerText = "Loading AI model (first time takes ~20 seconds)...";
 
   if (!summarizer) {
-    summarizer = await pipeline(
-      "summarization",
-      "Xenova/t5-small"   // loads automatically from HuggingFace CDN
-    );
+    summarizer = await pipeline("summarization", "Xenova/t5-small");
   }
 
   status.innerText = "Processing documents...";
@@ -61,7 +52,6 @@ processBtn.addEventListener("click", async () => {
 async function extractText(file) {
 
   if (file.type === "application/pdf") {
-
     const buffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
 
@@ -85,11 +75,9 @@ async function extractText(file) {
 // CLEAN TEXT
 // ==========================
 function cleanText(text) {
-
-  text = text.replace(/(\d+)\s+t\s+h/g, "$1th");
+  text = text.replace(/(\d+)\s+t\s+h/g, "$1th"); // Fix ordinals
   text = text.replace(/Disclaimer\s*:\s*The electronic version[^.]+\./gi, "");
   text = text.replace(/\s+/g, " ");
-
   return text.trim();
 }
 
@@ -99,15 +87,17 @@ function cleanText(text) {
 async function analyzeDocument(text, filename) {
 
   const title = decodeURIComponent(filename.replace(/\.[^/.]+$/, ""));
-
-  const dateMatch = text.match(/\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i);
-  const date = dateMatch ? dateMatch[0] : "Not detected";
-
+  const date = extractDate(text) || "Not detected";
   const docType = detectDocumentType(text);
-
-  let summary = await generateSummary(text);
-
   const sector = detectSector(text);
+
+  let summary = "No summary available.";
+
+  try {
+    summary = await generateSummary(text);
+  } catch (err) {
+    console.warn("Summary failed:", err);
+  }
 
   return {
     title,
@@ -123,11 +113,9 @@ async function analyzeDocument(text, filename) {
 // ==========================
 function detectDocumentType(text) {
   const lower = text.toLowerCase();
-
   if (lower.includes("bill") && lower.includes("amendment")) return "bill";
   if (lower.includes("orders of the day") || lower.includes("order paper")) return "orderpaper";
   if (lower.includes("the hansard") || lower.includes("national assembly debates")) return "hansard";
-
   return "generic";
 }
 
@@ -135,52 +123,53 @@ function detectDocumentType(text) {
 // SECTOR DETECTION
 // ==========================
 function detectSector(text) {
-
   const lower = text.toLowerCase();
-
-  if (lower.includes("defence") || lower.includes("security") || lower.includes("army"))
-    return "Security";
-
-  if (lower.includes("finance") || lower.includes("treasury") || lower.includes("budget"))
-    return "Finance";
-
-  if (lower.includes("education"))
-    return "Education";
-
-  if (lower.includes("environment") || lower.includes("nema"))
-    return "Environment";
-
-  if (lower.includes("health"))
-    return "Health";
-
+  if (lower.includes("defence") || lower.includes("security") || lower.includes("army")) return "Security";
+  if (lower.includes("finance") || lower.includes("treasury") || lower.includes("budget")) return "Finance";
+  if (lower.includes("education")) return "Education";
+  if (lower.includes("environment") || lower.includes("nema")) return "Environment";
+  if (lower.includes("health")) return "Health";
   return "General Governance";
 }
 
 // ==========================
-// AI SUMMARY (IMPROVED)
+// DATE EXTRACTION
 // ==========================
-async function generateSummary(text) {
-
-  // Remove procedural noise
-  text = text.replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
-
-  // Focus on legislative keywords
-  const importantSections = text.split(/(?=Motion|Statement|Report|Committee|inquiry|approval)/gi);
-
-  const focusedText = importantSections.slice(0, 3).join(" ");
-
-  const trimmed = focusedText.substring(0, 1500);
-
-  const result = await summarizer(trimmed, {
-    max_length: 130,
-    min_length: 50,
-  });
-
-  return result[0].summary_text;
+function extractDate(text) {
+  const patterns = [
+    /\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}\b/i
+  ];
+  for (let p of patterns) {
+    const match = text.match(p);
+    if (match) return match[0];
+  }
+  return null;
 }
 
 // ==========================
-// DISPLAY RESULTS
+// AI SUMMARY
+// ==========================
+async function generateSummary(text) {
+
+  // Clean procedural noise
+  text = text.replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
+  text = text.replace(/(Disclaimer|National Assembly Debates|Electronic version|Hansard Editor)/gi, "");
+
+  const chunk = text.substring(0, 1500); // Model-safe
+
+  const result = await summarizer(chunk, {
+    max_length: 130,
+    min_length: 50
+  });
+
+  if (result && result[0] && result[0].summary_text) return result[0].summary_text;
+
+  return "No summary available.";
+}
+
+// ==========================
+// DISPLAY
 // ==========================
 function displayResult(doc) {
 
