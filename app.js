@@ -4,6 +4,8 @@ import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers
 env.localModelPath = null;
 env.allowLocalModels = false;
 env.remoteModels = true;
+env.backends.onnx.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1/dist/";
+
 
 
 const fileInput = document.getElementById("fileInput");
