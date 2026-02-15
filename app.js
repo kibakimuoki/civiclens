@@ -24,7 +24,7 @@ function displaySummaries(summaries, container) {
       <p><strong>Date:</strong> ${doc.date || 'N/A'}</p>
       <p><strong>Sector:</strong> ${doc.sector || 'N/A'}</p>
       <p>${doc.summary}</p>
-      <a href="${doc.source_file}" target="_blank">View Source</a>
+      <a href="${doc.source_file || '#'}" target="_blank">View Source</a>
     `;
     container.appendChild(card);
   });
@@ -83,7 +83,7 @@ document.getElementById('process-pdf-btn').addEventListener('click', async () =>
       fullText += pageText + '\n\n';
     }
 
-    // Simple in-browser “AI summary”: take first 300 chars + ellipsis
+    // Simple in-browser summary (first 300 chars)
     const summaryText = fullText.length > 300 ? fullText.slice(0, 300) + '...' : fullText;
 
     const card = document.createElement('div');
