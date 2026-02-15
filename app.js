@@ -46,7 +46,6 @@ processBtn.addEventListener("click", async () => {
     try {
       status.innerText = `Processing file ${i + 1}/${uploadedFiles.length}: ${file.name}`;
       const rawText = await extractText(file);
-      console.log(`Extracted text length for ${file.name}:`, rawText.length);
 
       if (!rawText || !rawText.trim()) {
         displayResult({
@@ -77,7 +76,7 @@ processBtn.addEventListener("click", async () => {
 });
 
 // ==========================
-// EXTRACT TEXT (PDF + TXT) with OCR
+// EXTRACT TEXT (PDF + TXT) with OCR + TIMEOUT FIX
 // ==========================
 async function extractText(file) {
   if (file.type !== "application/pdf") {
@@ -163,9 +162,6 @@ async function extractText(file) {
   return fullText.trim();
 }
 
-
-
-
 // ==========================
 // CLEAN TEXT
 // ==========================
@@ -223,7 +219,7 @@ function detectSector(text) {
 }
 
 // ==========================
-// AI SUMMARY (safe, async, freeze-proof)
+// AI SUMMARY (chunked)
 // ==========================
 async function generateSummary(text) {
   text = text.replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
