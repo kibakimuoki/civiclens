@@ -8,9 +8,6 @@
   <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
 
-  <!-- Browser AI (Transformers.js) -->
-  <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers/dist/transformers.min.js"></script>
-
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -31,7 +28,14 @@
   <h2>Recent Legislative Summaries</h2>
   <div id="results"></div>
 
-  <script src="app.js"></script>
+  <!-- Load Transformers.js as module -->
+  <script type="module">
+    import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers/dist/transformers.min.js";
+    window.pipeline = pipeline;
+  </script>
+
+  <!-- Load App -->
+  <script type="module" src="app.js"></script>
 
 </body>
 </html>
