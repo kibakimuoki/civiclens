@@ -2,21 +2,70 @@ body {
   font-family: Arial, sans-serif;
   margin: 0;
   padding: 0;
+  background: #f5f6fa;
+  color: #2c3e50;
 }
 
 header {
-  background: #2c3e50;
+  background: #1abc9c;
   color: #fff;
-  padding: 1rem;
+  padding: 2rem 1rem;
   text-align: center;
+}
+
+header nav a {
+  margin: 0 1rem;
+  color: #fff;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+header nav a:hover {
+  text-decoration: underline;
+}
+
+main {
+  max-width: 1000px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+section {
+  margin-bottom: 3rem;
+}
+
+h1, h2 {
+  margin-top: 0;
+}
+
+.demo-card {
+  border: 1px solid #ddd;
+  background: #fff;
+  padding: 1rem;
+  border-radius: 6px;
+  margin: 1rem 0;
+}
+
+.demo-card button {
+  padding: 0.5rem 1rem;
+  margin-bottom: 1rem;
+  background: #1abc9c;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.demo-card button:hover {
+  background: #16a085;
 }
 
 .summary-card {
   border: 1px solid #ddd;
   padding: 1rem;
-  margin: 1rem;
-  border-radius: 5px;
-  background: #f9f9f9;
+  margin: 1rem 0;
+  border-radius: 6px;
+  background: #fff;
 }
 
 .summary-card h2 {
@@ -24,7 +73,13 @@ header {
 }
 
 .summary-card a {
-  color: #3498db;
+  color: #1abc9c;
   text-decoration: none;
 }
 
+footer {
+  background: #2c3e50;
+  color: #fff;
+  text-align: center;
+  padding: 1rem;
+}
