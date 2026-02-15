@@ -75,9 +75,7 @@ processBtn.addEventListener("click", async () => {
       }
 
       let cleaned = cleanExtractedText(rawText);
-      cleaned = cleanText(cleaned);
-      cleaned = normalizeBillStructure(cleaned);
-
+      
       const structured = await analyzeDocument(cleaned, file.name);
       displayResult(structured);
 
