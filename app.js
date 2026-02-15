@@ -44,6 +44,7 @@ processBtn.addEventListener("click", async () => {
   progressBar.innerText = "0%";
   status.innerText = "Loading AI model...";
 
+  // Load AI model if not already loaded
   if (!summarizer) {
     try {
       summarizer = await pipeline("summarization", "Xenova/distilbart-cnn-6-6");
@@ -60,7 +61,7 @@ processBtn.addEventListener("click", async () => {
     const file = uploadedFiles[i];
     try {
       status.innerText = `Processing file ${i + 1}/${uploadedFiles.length}: ${file.name}`;
-      let rawText = await extractText(file);
+      const rawText = await extractText(file);
 
       if (!rawText || !rawText.trim()) {
         displayResult({
@@ -103,8 +104,9 @@ async function extractText(file) {
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
 
   let fullText = "";
+  let ocrPagesUsed = 0;
+  const MAX_OCR_PAGES = 10;
   const MAX_TOTAL_CHARS = 15000;
-  const MAX_OCR_PAGES = 5;
 
   for (let i = 1; i <= pdf.numPages; i++) {
     try {
@@ -112,8 +114,8 @@ async function extractText(file) {
       const content = await page.getTextContent();
       let pageText = content.items.map(item => item.str).join(" ").trim();
 
-      // Run OCR unconditionally on first few pages
-      if (i <= MAX_OCR_PAGES) {
+      if (pageText.length < 50 && ocrPagesUsed < MAX_OCR_PAGES) {
+        ocrPagesUsed++;
         const viewport = page.getViewport({ scale: 1.2 });
         const canvas = document.createElement("canvas");
         canvas.width = viewport.width;
@@ -140,7 +142,7 @@ async function extractText(file) {
 }
 
 // ==========================
-// STRONG CLEANING
+// STRONG OCR CLEANING
 // ==========================
 function cleanExtractedText(text) {
   if (!text) return "";
@@ -155,16 +157,8 @@ function cleanExtractedText(text) {
   return text.trim();
 }
 
-function cleanText(text) {
-  if (!text) return "";
-  text = text.replace(/(\d+)\s+t\s+h/gi, "$1th");
-  text = text.replace(/Disclaimer\s*:\s*The electronic version[^.]+\./gi, "");
-  text = text.replace(/\s{2,}/g, " ");
-  return text.trim();
-}
-
 // ==========================
-// NORMALIZE STRUCTURE
+// NORMALIZE BILL STRUCTURE
 // ==========================
 function normalizeBillStructure(text) {
   if (!text) return "";
@@ -202,58 +196,63 @@ function normalizeBillStructure(text) {
 }
 
 // ==========================
+// BASIC CLEANING
+// ==========================
+function cleanText(text) {
+  if (!text) return "";
+  text = text.replace(/(\d+)\s+t\s+h/gi, "$1th");
+  text = text.replace(/Disclaimer\s*:\s*The electronic version[^.]+\./gi, "");
+  text = text.replace(/\s{2,}/g, " ");
+  return text.trim();
+}
+
+// ==========================
 // DOCUMENT ANALYSIS
 // ==========================
 async function analyzeDocument(text, filename) {
   const title = decodeURIComponent(filename.replace(/\.[^/.]+$/, ""));
-  const date = extractDate(text);
+  const date = extractDate(text) || "Not detected";
   const sector = detectSector(text);
 
   let summary = text.substring(0, 300) + "...";
 
-  const cleanedForSummary = cleanForSummary(text);
-
-  if (cleanedForSummary.length > 200 && summarizer) {
+  if (text.length > 200 && summarizer) {
     try {
-      const aiSummary = await generateSummary(cleanedForSummary);
+      const aiSummary = await generateSummary(text);
       if (aiSummary && aiSummary.length > 40) summary = aiSummary;
     } catch {
       summary = text.substring(0, 300) + "...";
     }
   }
 
-  return { title, date, sector, summary, fullText: text.substring(0, 8000) };
+  return {
+    title,
+    date,
+    sector,
+    summary,
+    fullText: text.substring(0, 8000)
+  };
 }
 
 // ==========================
-// CLEAN TEXT FOR SUMMARY
-// ==========================
-function cleanForSummary(text) {
-  return text
-    .split(/\r?\n/)
-    .filter(l => (l.match(/[a-zA-Z]/g) || []).length > 20)
-    .join("\n");
-}
-
-// ==========================
-// DATE & SECTOR
+// DATE & SECTOR DETECTION
 // ==========================
 function extractDate(text) {
-  const lines = text.split(/\r?\n/).slice(0, 15).map(l => l.trim()).filter(Boolean);
+  const cleaned = text.replace(/\s+/g, " "); // normalize spaces
 
   const patterns = [
     /\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
-    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b/i,
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}\b/i,
+    /\b\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}\b/i,
     /\b\d{1,2}\s+(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)\s+\d{4}\b/i
   ];
 
-  for (const line of lines) {
-    for (const p of patterns) {
-      const match = line.match(p);
-      if (match) return match[0];
-    }
+  for (let p of patterns) {
+    const match = cleaned.match(p);
+    if (match) return match[0];
   }
-  return "Not detected";
+
+  return null;
 }
 
 function detectSector(text) {
@@ -277,7 +276,11 @@ async function generateSummary(text) {
     let chunks = [];
     for (let i = 0; i < text.length; i += CHUNK_SIZE) {
       const input = text.slice(i, i + CHUNK_SIZE);
-      const result = await summarizer(input, { max_new_tokens: 180, min_length: 60, do_sample: false });
+      const result = await summarizer(input, {
+        max_new_tokens: 180,
+        min_length: 60,
+        do_sample: false
+      });
       chunks.push(result?.[0]?.generated_text || input.substring(0, 180));
     }
     return chunks.join(" ").substring(0, 500) + "...";
@@ -291,7 +294,9 @@ async function generateSummary(text) {
 // SAFE HTML ESCAPE
 // ==========================
 function escapeHTML(str) {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return str.replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
 }
 
 // ==========================
@@ -309,7 +314,8 @@ function displayResult(doc) {
     <p><strong>Sector:</strong> ${escapeHTML(doc.sector)}</p>
     <p><strong>AI Summary:</strong> ${escapeHTML(doc.summary)}</p>
     <p style="font-size: 12px; opacity: 0.7;">
-      This summary was generated using Xenova/distilbart-cnn-6-6. OCR errors or formatting noise may affect accuracy.
+      This summary was generated using Xenova/distilbart-cnn-6-6.
+      OCR errors or formatting noise may affect accuracy.
     </p>
     <details>
       <summary>View Extracted Text</summary>
@@ -318,8 +324,4 @@ function displayResult(doc) {
   `;
 
   resultsDiv.prepend(card);
-
-  // Trigger fade-in animation
-  setTimeout(() => card.classList.add("visible"), 50);
-  card.scrollIntoView({ behavior: "smooth", block: "start" });
 }
