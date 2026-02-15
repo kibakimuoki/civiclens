@@ -11,17 +11,21 @@ header {
   text-align: center;
 }
 
-header nav a {
+nav a {
+  margin: 0 1rem;
   color: #fff;
-  margin: 0 0.5rem;
   text-decoration: none;
 }
 
-section {
-  padding: 2rem;
+nav a:hover {
+  text-decoration: underline;
 }
 
-.summary-card, .demo-card {
+section {
+  padding: 1rem 2rem;
+}
+
+.summary-card {
   border: 1px solid #ddd;
   padding: 1rem;
   margin: 1rem 0;
@@ -36,15 +40,4 @@ section {
 .summary-card a {
   color: #3498db;
   text-decoration: none;
-}
-
-#controls {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-#controls input, #controls button {
-  padding: 0.5rem;
-  font-size: 1rem;
 }
