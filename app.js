@@ -98,9 +98,7 @@ processBtn.addEventListener("click", async () => {
 // EXTRACT TEXT (PDF + TXT) with OCR
 // ==========================
 async function extractText(file) {
-  if (file.type !== "application/pdf") {
-    return await file.text();
-  }
+  if (file.type !== "application/pdf") return await file.text();
 
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
@@ -182,7 +180,6 @@ function normalizeBillStructure(text) {
 
   text = lines.join("\n");
 
-  // Prefer OBJECTS AND REASONS
   const objectsMatch = text.match(/OBJECTS AND REASONS[\s\S]{300,4000}/i);
   if (objectsMatch) return objectsMatch[0];
 
@@ -238,18 +235,23 @@ async function analyzeDocument(text, filename) {
 }
 
 // ==========================
-// DATE & SECTOR
+// DATE & SECTOR DETECTION
 // ==========================
 function extractDate(text) {
+  const cleaned = text.replace(/\s+/g, " "); // normalize spaces
+
   const patterns = [
     /\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
     /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}\b/i,
-    /\b\d{1,2}[-\/ ](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-\/ ]\d{4}\b/i
+    /\b\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}\b/i,
+    /\b\d{1,2}\s+(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)\s+\d{4}\b/i
   ];
+
   for (let p of patterns) {
-    const match = text.match(p);
+    const match = cleaned.match(p);
     if (match) return match[0];
   }
+
   return null;
 }
 
@@ -264,14 +266,14 @@ function detectSector(text) {
 }
 
 // ==========================
-// SAFE AI SUMMARY
+// CHUNKED AI SUMMARY
 // ==========================
 async function generateSummary(text) {
   if (!text || !summarizer) return text.substring(0, 300) + "...";
 
   try {
-    const chunks = [];
     const CHUNK_SIZE = 2000;
+    let chunks = [];
     for (let i = 0; i < text.length; i += CHUNK_SIZE) {
       const input = text.slice(i, i + CHUNK_SIZE);
       const result = await summarizer(input, {
@@ -292,10 +294,9 @@ async function generateSummary(text) {
 // SAFE HTML ESCAPE
 // ==========================
 function escapeHTML(str) {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return str.replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
 }
 
 // ==========================
