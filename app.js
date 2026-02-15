@@ -212,6 +212,27 @@ function detectSector(text) {
   return "General Governance";
 }
 
+// Noise Cleaning Function
+
+function cleanExtractedText(text) {
+  if (!text) return "";
+
+  // Remove excessive spacing
+  text = text.replace(/\s+/g, " ");
+
+  // Remove common Gazette noise
+  text = text.replace(/SPECIAL ISSUE.*?BILLS, 2025/gi, "");
+  text = text.replace(/ARRANGEMENT OF CLAUSES.*?PART I/gi, "");
+  text = text.replace(/FIRST SCHEDULE.*?/gi, "");
+  text = text.replace(/SECOND SCHEDULE.*?/gi, "");
+
+  // Remove weird OCR symbols
+  text = text.replace(/[^\x00-\x7F]/g, "");
+
+  return text.trim();
+}
+
+
 // ==========================
 // AI SUMMARY (safe, fallback)
 // ==========================
