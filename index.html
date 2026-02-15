@@ -2,87 +2,187 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>CivicLens</title>
+  <title>CivicLens — Legislative Summaries</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- PDF.js (non-module version) -->
+  <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-
   <!-- Tesseract.js -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
 
-  <link rel="stylesheet" href="styles.css">
+  <!-- Styles -->
   <style>
-    #progressContainer {
-      width: 100%;
-      background-color: #eee;
-      border-radius: 8px;
-      overflow: hidden;
-      margin-top: 10px;
-      display: none;
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 0;
     }
+
+    header {
+      background: #1f2937;
+      color: white;
+      padding: 1rem 2rem;
+      text-align: center;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.6rem;
+    }
+
+    header p {
+      margin: 0;
+      font-size: 0.9rem;
+      opacity: 0.8;
+    }
+
+    main {
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+
+    .upload-section {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      margin-bottom: 2rem;
+    }
+
+    .upload-section input[type="file"] {
+      display: block;
+      margin-bottom: 1rem;
+    }
+
+    .upload-section button {
+      padding: 0.5rem 1rem;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .upload-section button:hover {
+      background: #1d4ed8;
+    }
+
+    #status {
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+      color: #374151;
+    }
+
+    #progressContainer {
+      display: none;
+      background: #e5e7eb;
+      border-radius: 5px;
+      overflow: hidden;
+      margin-top: 0.5rem;
+    }
+
     #progressBar {
       width: 0%;
-      height: 20px;
-      background-color: #4caf50;
-      text-align: center;
+      background: #10b981;
       color: white;
-      line-height: 20px;
+      text-align: center;
+      padding: 0.2rem 0;
+      font-size: 0.8rem;
     }
+
     .summary-card {
-      border: 1px solid #ccc;
-      padding: 15px;
-      margin-bottom: 15px;
+      background: white;
+      padding: 1rem 1.2rem;
+      margin-bottom: 1rem;
       border-radius: 8px;
-      background: #fafafa;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.4s ease, transform 0.4s ease;
     }
+
+    .summary-card.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
     .summary-card h3 {
-      margin: 0 0 5px 0;
+      margin-top: 0;
+    }
+
+    .summary-card details {
+      margin-top: 0.5rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .summary-card details[open] p {
+      max-height: 1000px;
+    }
+
+    .summary-card details p {
+      margin: 0.5rem 0 0 0;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    @media (max-width: 600px) {
+      main {
+        margin: 1rem;
+      }
     }
   </style>
 </head>
 <body>
 
+<header>
   <h1>CivicLens</h1>
   <p>AI-powered platform making Kenyan parliamentary records accessible and actionable</p>
+</header>
 
-  <hr>
-
-  <h2>Upload Your Document (PDF or TXT)</h2>
-  <input type="file" id="fileInput" multiple accept=".pdf,.txt">
-  <button id="processBtn">Process Uploaded Files</button>
-
-  <p id="status"></p>
-
-  <div id="progressContainer">
-    <div id="progressBar">0%</div>
+<main>
+  <div class="upload-section">
+    <input type="file" id="fileInput" multiple accept=".pdf,.txt">
+    <button id="processBtn">Process Uploaded Files</button>
+    <div id="status">No files uploaded.</div>
+    <div id="progressContainer">
+      <div id="progressBar">0%</div>
+    </div>
   </div>
 
-  <hr>
-
-  <h2>Recent Legislative Summaries</h2>
   <div id="results">
-    <p id="placeholder">No legislative summaries yet. Upload and process a document above.</p>
+    <p id="placeholder" style="text-align:center; color:#6b7280;">Recent Legislative Summaries will appear here after processing files.</p>
   </div>
-  <!-- Processing overlay -->
-<div id="overlay" style="
-  display:none;
-  position:fixed;
-  top:0;
-  left:0;
-  width:100%;
-  height:100%;
-  background: rgba(0,0,0,0.6);
-  color: #fff;
-  font-size:1.5em;
-  text-align:center;
-  line-height:100vh;
-  z-index:9999;
-">
-  Processing document... please wait
-</div>
+</main>
 
+<!-- App.js -->
+<script type="module" src="app.js"></script>
 
-  <script type="module" src="app.js"></script>
+<!-- Extra JS for animations & auto-scroll -->
+<script>
+  // Animate new summary cards and auto-scroll
+  const resultsDiv = document.getElementById("results");
+
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach(node => {
+        if (node.classList && node.classList.contains("summary-card")) {
+          // Trigger fade-in animation
+          setTimeout(() => node.classList.add("visible"), 50);
+          // Scroll to newest summary smoothly
+          node.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+    });
+  });
+
+  observer.observe(resultsDiv, { childList: true });
+</script>
+
 </body>
 </html>
