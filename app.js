@@ -18,17 +18,14 @@ processBtn.addEventListener("click", async () => {
   for (let file of uploadedFiles) {
     const rawText = await extractText(file);
     const cleaned = cleanText(rawText);
-    const structured = analyzeDocument(cleaned, file.name);
+
+    const structured = await sendToBackend(cleaned, file.name);
     displayResult(structured);
   }
 
   uploadedFiles = [];
   fileInput.value = "";
 });
-
-// ==========================
-// TEXT EXTRACTION
-// ==========================
 
 async function extractText(file) {
   if (file.type === "application/pdf") {
@@ -50,98 +47,25 @@ async function extractText(file) {
   }
 }
 
-// ==========================
-// CLEANING ENGINE
-// ==========================
-
 function cleanText(text) {
-
-  // Fix broken ordinal spacing (4 t h → 4th)
   text = text.replace(/(\d+)\s+t\s+h/g, "$1th");
-
-  // Remove repeated Hansard disclaimers
   text = text.replace(/Disclaimer\s*:\s*The electronic version[^.]+\./gi, "");
-
-  // Remove page number headers
-  text = text.replace(/\d+\s+December\s+\d{4}\s+NATIONAL ASSEMBLY DEBATES\s+\d+/gi, "");
-
-  // Remove multiple spaces
+  text = text.replace(/NATIONAL ASSEMBLY DEBATES/gi, "");
   text = text.replace(/\s+/g, " ");
-
   return text.trim();
 }
 
-// ==========================
-// ANALYSIS
-// ==========================
-
-function analyzeDocument(text, filename) {
-
-  const title = decodeURIComponent(filename.replace(/\.[^/.]+$/, ""));
-
-  const dateMatch = text.match(/\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i);
-  const date = dateMatch ? dateMatch[0] : "Not detected";
-
-  const sector = detectSector(text);
-
-  const summary = generateSummary(text);
-
-  return {
-    title,
-    date,
-    sector,
-    summary,
-    fullText: text.substring(0, 8000)
-  };
-}
-
-// ==========================
-// SECTOR CLASSIFICATION
-// ==========================
-
-function detectSector(text) {
-  const lower = text.toLowerCase();
-
-  if (lower.includes("defence") || lower.includes("security") || lower.includes("army")) return "Security";
-  if (lower.includes("finance") || lower.includes("treasury") || lower.includes("budget")) return "Finance";
-  if (lower.includes("education") || lower.includes("school")) return "Education";
-  if (lower.includes("environment") || lower.includes("nema")) return "Environment";
-  if (lower.includes("health")) return "Health";
-
-  return "General Governance";
-}
-
-// ==========================
-// IMPROVED SUMMARY ENGINE
-// ==========================
-
-function generateSummary(text) {
-
-  const sentences = text.split(/(?<=\.)\s+/);
-
-  const ignorePhrases = [
-    "disclaimer",
-    "national assembly debates",
-    "electronic version",
-    "hansard editor"
-  ];
-
-  const filtered = sentences.filter(sentence => {
-    const lower = sentence.toLowerCase();
-    return !ignorePhrases.some(phrase => lower.includes(phrase));
+async function sendToBackend(text, filename) {
+  const response = await fetch("/process", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, filename })
   });
 
-  const important = filtered.slice(0, 8);
-
-  return important.join(" ");
+  return await response.json();
 }
 
-// ==========================
-// DISPLAY
-// ==========================
-
 function displayResult(doc) {
-
   const card = document.createElement("div");
   card.className = "card";
 
@@ -149,12 +73,12 @@ function displayResult(doc) {
     <h3>${doc.title}</h3>
     <p><strong>Date:</strong> ${doc.date}</p>
     <p><strong>Sector:</strong> ${doc.sector}</p>
-    <p><strong>AI Summary:</strong> ${doc.summary}</p>
+    <p><strong>AI Summary:</strong></p>
+    <p>${doc.summary}</p>
     <details>
       <summary>View Extracted Text</summary>
-      <p>${doc.fullText}</p>
+      <p>${doc.extractedText}</p>
     </details>
-    <hr>
   `;
 
   resultsDiv.prepend(card);
