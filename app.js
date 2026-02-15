@@ -111,52 +111,57 @@ async function extractText(file) {
     const batchTasks = [];
 
     for (let i = batchStart; i <= batchEnd; i++) {
-      batchTasks.push(
-        (async () => {
+     batchTasks.push(
+  withTimeout(
+    (async () => {
+      try {
+        const page = await withTimeout(pdf.getPage(i));
+
+        let pageText = "";
+        try {
+          const content = await withTimeout(page.getTextContent());
+          pageText = content.items.map(item => item.str).join(" ").trim();
+        } catch {
+          pageText = "";
+        }
+
+        if (!pageText || pageText.length < 10) {
           try {
-            const page = await withTimeout(pdf.getPage(i));
+            const viewport = page.getViewport({ scale: 1.3 });
+            const canvas = document.createElement("canvas");
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext("2d");
 
-            let pageText = "";
-            try {
-              const content = await withTimeout(page.getTextContent());
-              pageText = content.items.map(item => item.str).join(" ").trim();
-            } catch {
-              pageText = "";
-            }
+            await withTimeout(
+              page.render({ canvasContext: ctx, viewport }).promise
+            );
 
-            // If text is empty, try OCR
-            if (!pageText || pageText.length < 10) {
-              try {
-                const viewport = page.getViewport({ scale: 1.3 });
-                const canvas = document.createElement("canvas");
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-                const ctx = canvas.getContext("2d");
-
-                await withTimeout(
-                  page.render({ canvasContext: ctx, viewport }).promise
-                );
-
-                const ocr = await withTimeout(
-                  Tesseract.recognize(canvas, "eng")
-                );
-                pageText = ocr.data.text.trim();
-              } catch (err) {
-                console.warn("OCR failed on page", i, err);
-              }
-            }
-
-            fullText += pageText + " ";
+            const ocr = await withTimeout(
+              Tesseract.recognize(canvas, "eng")
+            );
+            pageText = ocr.data.text.trim();
           } catch (err) {
-            console.warn("Page failed:", i, err);
-          } finally {
-            const percent = Math.round((i / totalPages) * 100);
-            progressBar.style.width = percent + "%";
-            progressBar.innerText = `Extracting pages: ${percent}%`;
-            await new Promise(r => setTimeout(r, 0));
+            console.warn("OCR failed on page", i, err);
           }
-        })()
-      );
+        }
+
+        fullText += pageText + " ";
+      } catch (err) {
+        console.warn("Page failed:", i, err);
+      } finally {
+        const percent = Math.round((i / totalPages) * 100);
+        progressBar.style.width = percent + "%";
+        progressBar.innerText = `Extracting pages: ${percent}%`;
+        await new Promise(r => setTimeout(r, 0));
+      }
+    })(),
+    10000 // 10‑second hard timeout
+  ).catch(err => {
+    console.warn("Page hard-timeout:", err);
+  })
+);
+
     }
 
     await Promise.allSettled(batchTasks);
