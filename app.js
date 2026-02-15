@@ -166,24 +166,32 @@ function cleanExtractedText(text) {
 function normalizeBillStructure(text) {
   if (!text) return "";
 
-  // 1. Prefer OBJECTS AND REASONS
-  const objectsMatch = text.match(/OBJECTS AND REASONS[\s\S]{200,3000}/i);
+  // Remove common header junk
+  text = text.replace(/REPUBLIC OF KENYA[\s\S]{0,300}/i, "");
+  text = text.replace(/NATIONAL ASSEMBLY RECEIVED[\s\S]{0,200}/i, "");
+  text = text.replace(/DIRECTOR LEGAL SERVICES[\s\S]{0,200}/i, "");
+  text = text.replace(/NAIROBI[,.\s\d-]+/i, "");
+
+  // Prefer OBJECTS AND REASONS section
+  const objectsMatch = text.match(/OBJECTS AND REASONS[\s\S]{300,4000}/i);
   if (objectsMatch) return objectsMatch[0];
 
-  // 2. Extract real bill content after "A BILL"
-  const billMatch = text.match(/A BILL[\s\S]{200,3000}/i);
-  if (billMatch) return billMatch[0];
+  // Extract main bill body starting from Clause 1
+  const clauseMatch = text.match(/Clause\s+1[\s\S]{300,4000}/i);
+  if (clauseMatch) return clauseMatch[0];
 
-  // 3. For Hansard - extract debate only
-  const hansardMatch = text.match(/The House met[\s\S]{200,3000}/i);
+  // Extract Hansard debate
+  const hansardMatch = text.match(/The House met[\s\S]{300,4000}/i);
   if (hansardMatch) return hansardMatch[0];
 
-  // 4. For Order Papers - extract order section
-  const orderMatch = text.match(/ORDER OF BUSINESS[\s\S]{200,3000}/i);
+  // Extract Order Paper business
+  const orderMatch = text.match(/ORDER OF BUSINESS[\s\S]{300,4000}/i);
   if (orderMatch) return orderMatch[0];
 
-  return text.substring(0, 3000);
+  // Fallback
+  return text.substring(300, 3500);
 }
+
 
 
 // ==========================
