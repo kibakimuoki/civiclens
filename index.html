@@ -32,10 +32,22 @@
       </p>
     </section>
 
+    <!-- Demo Section -->
+    <section id="demo">
+      <h2>AI in Action</h2>
+      <p>Compare original Hansard text with AI-generated summary:</p>
+      <div class="demo-card">
+        <button id="toggle-btn">Show Original Hansard</button>
+        <div id="demo-content">
+          <p><strong>AI Summary:</strong> Deputy Speaker moves Special Motions based on committee reports, approvals of appointments, and public participation updates in plain language.</p>
+        </div>
+      </div>
+    </section>
+
     <!-- Upload Section -->
     <section id="upload">
       <h2>Upload Your Document (PDF)</h2>
-      <input type="file" id="pdf-upload" accept="application/pdf" multiple>
+      <input type="file" id="pdf-upload" accept=".pdf" multiple>
       <p>Uploaded PDFs will be summarized and appear below.</p>
       <div id="uploaded-summaries"></div>
     </section>
@@ -43,7 +55,8 @@
     <!-- Summaries Section -->
     <section id="summaries">
       <h2>Recent Legislative Summaries</h2>
-      <div id="summary-container"></div>
+      <input type="text" id="search-input" placeholder="Search by keyword, sector, or title...">
+      <div id="summaries-container"></div>
     </section>
 
     <!-- Contact Section -->
@@ -58,6 +71,7 @@
     <p>&copy; 2026 CivicLens / QEMB | Open-source AI for democratic transparency</p>
   </footer>
 
+  <!-- PDF.js Library -->
   <script src="https://mozilla.github.io/pdf.js/build/pdf.js"></script>
   <script src="app.js"></script>
 </body>
