@@ -1,4 +1,3 @@
-// app.js
 async function loadSummaries() {
   try {
     const response = await fetch('summaries.json');
@@ -13,10 +12,9 @@ async function loadSummaries() {
 
       card.innerHTML = `
         <h2>${doc.title}</h2>
-        <p><strong>Date:</strong> ${doc.date || 'N/A'}</p>
-        <p><strong>Sector:</strong> ${doc.sector}</p>
-        <p>${doc.summary}</p>
-        <a href="${doc.source_file}" target="_blank">View Source</a>
+        <p><strong>Date:</strong> ${doc.date || 'N/A'} | <strong>Sector:</strong> ${doc.sector}</p>
+        <p>${doc.summary.substring(0, 300)}... <a href="${doc.source_file}" target="_blank">Read full</a></p>
+        <p><strong>Keywords:</strong> ${doc.keywords.join(', ')}</p>
       `;
 
       container.appendChild(card);
@@ -24,6 +22,7 @@ async function loadSummaries() {
 
   } catch (err) {
     console.error('Error loading summaries:', err);
+    document.getElementById('summaries').innerHTML = '<p>Failed to load summaries. Please try again later.</p>';
   }
 }
 
