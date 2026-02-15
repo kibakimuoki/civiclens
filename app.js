@@ -1,4 +1,5 @@
 import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1";
+import Tesseract from "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js";
 
 const fileInput = document.getElementById("fileInput");
 const processBtn = document.getElementById("processBtn");
@@ -20,7 +21,6 @@ fileInput.addEventListener("change", (e) => {
 // PROCESS BUTTON
 // ==========================
 processBtn.addEventListener("click", async () => {
-
   if (uploadedFiles.length === 0) {
     alert("Upload files first.");
     return;
@@ -51,10 +51,9 @@ processBtn.addEventListener("click", async () => {
 });
 
 // ==========================
-// TEXT EXTRACTION
+// TEXT EXTRACTION (with OCR)
 // ==========================
 async function extractText(file) {
-
   if (file.type === "application/pdf") {
     const buffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
@@ -64,7 +63,23 @@ async function extractText(file) {
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      const pageText = content.items.map(item => item.str).join(" ");
+      let pageText = content.items.map(item => item.str).join(" ").trim();
+
+      // If no text is found, fallback to OCR
+      if (!pageText || pageText.length < 10) {
+        // Render page to canvas
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext("2d");
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        // OCR with Tesseract
+        const { data: { text } } = await Tesseract.recognize(canvas, "eng", { logger: m => console.log(m) });
+        pageText = text;
+      }
+
       fullText += pageText + " ";
     }
 
@@ -90,14 +105,12 @@ function cleanText(text) {
 // ANALYZE DOCUMENT
 // ==========================
 async function analyzeDocument(text, filename) {
-
   const title = decodeURIComponent(filename.replace(/\.[^/.]+$/, ""));
   const date = extractDate(text) || "Not detected";
   const docType = detectDocumentType(text);
   const sector = detectSector(text);
 
   let summary = "No summary available.";
-
   try {
     summary = await generateSummary(text);
   } catch (err) {
@@ -168,7 +181,6 @@ function chunkText(text, chunkSize = 1500) {
 // AI SUMMARY
 // ==========================
 async function generateSummary(text) {
-
   // Remove procedural noise
   text = text.replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
   text = text.replace(/(Disclaimer|National Assembly Debates|Electronic version|Hansard Editor)/gi, "");
@@ -188,7 +200,6 @@ async function generateSummary(text) {
   }
 
   if (summaries.length > 0) return summaries.join(" ");
-
   return "No summary available.";
 }
 
@@ -196,7 +207,6 @@ async function generateSummary(text) {
 // DISPLAY
 // ==========================
 function displayResult(doc) {
-
   const card = document.createElement("div");
   card.style.border = "1px solid #ccc";
   card.style.padding = "15px";
