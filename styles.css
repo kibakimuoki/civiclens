@@ -12,32 +12,19 @@ header {
 }
 
 nav a {
-  margin: 0 1rem;
   color: #fff;
+  margin: 0 1rem;
   text-decoration: none;
-}
-
-nav a:hover {
-  text-decoration: underline;
-}
-
-section {
-  padding: 1rem 2rem;
 }
 
 .summary-card {
   border: 1px solid #ddd;
   padding: 1rem;
-  margin: 1rem 0;
+  margin: 1rem;
   border-radius: 5px;
   background: #f9f9f9;
 }
 
 .summary-card h3 {
   margin-top: 0;
-}
-
-.summary-card a {
-  color: #3498db;
-  text-decoration: none;
 }
