@@ -1,98 +1,142 @@
-const fileInput = document.getElementById('file-input');
-const processBtn = document.getElementById('process-btn');
-const uploadedFilesDiv = document.getElementById('uploaded-files');
-const summariesContainer = document.getElementById('summaries-container');
+const fileInput = document.getElementById("fileInput");
+const processBtn = document.getElementById("processBtn");
+const resultsDiv = document.getElementById("results");
 
 let uploadedFiles = [];
 
-// Read files
-fileInput.addEventListener('change', (e) => {
+// Store uploaded files
+fileInput.addEventListener("change", (e) => {
   uploadedFiles = Array.from(e.target.files);
-  uploadedFilesDiv.innerHTML = '';
-  uploadedFiles.forEach(file => {
-    const fileDiv = document.createElement('div');
-    fileDiv.textContent = `✅ ${file.name}`;
-    uploadedFilesDiv.appendChild(fileDiv);
-  });
+  alert(uploadedFiles.length + " file(s) ready for processing.");
 });
 
-// Helper: extract text from PDF
-async function extractPdfText(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-  let text = '';
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const strings = content.items.map(item => item.str);
-    text += strings.join(' ') + '\n\n';
-  }
-  return text;
-}
-
-// Helper: read text file
-async function readTextFile(file) {
-  return await file.text();
-}
-
-// AI summarization function (using gpt4all.js)
-async function summarizeText(text) {
-  // Initialize GPT4All model (small version for browser)
-  const gpt = new GPT4All();
-  await gpt.init({ model: 'ggml-gpt4all-j-v1.3-groovy' });
-
-  const prompt = `You are an AI legislative assistant.
-Extract key metadata (title, date, sector) if possible.
-Summarize the following parliamentary document in plain language for easy understanding:\n\n${text}`;
-
-  const summary = await gpt.prompt(prompt, { max_tokens: 500 });
-  return summary;
-}
-
-// Process uploaded files
-processBtn.addEventListener('click', async () => {
+// Process button
+processBtn.addEventListener("click", async () => {
   if (uploadedFiles.length === 0) {
-    alert('Please select files first.');
+    alert("Please upload files first.");
     return;
   }
 
-  summariesContainer.innerHTML = '<p>Processing files...</p>';
-
-  for (const file of uploadedFiles) {
-    let text = '';
-    if (file.type === 'application/pdf') {
-      text = await extractPdfText(file);
-    } else if (file.type === 'text/plain') {
-      text = await readTextFile(file);
-    }
-
-    const summary = await summarizeText(text);
-
-    // Create card
-    const card = document.createElement('div');
-    card.classList.add('summary-card');
-    card.innerHTML = `
-      <h3>${file.name}</h3>
-      <button class="toggle-full-btn">Show Full Text</button>
-      <pre class="full-text" style="display:none;">${text}</pre>
-      <p><strong>AI Summary:</strong> ${summary}</p>
-    `;
-
-    summariesContainer.appendChild(card);
-
-    const toggleBtn = card.querySelector('.toggle-full-btn');
-    const fullText = card.querySelector('.full-text');
-
-    toggleBtn.addEventListener('click', () => {
-      if (fullText.style.display === 'none') {
-        fullText.style.display = 'block';
-        toggleBtn.textContent = 'Hide Full Text';
-      } else {
-        fullText.style.display = 'none';
-        toggleBtn.textContent = 'Show Full Text';
-      }
-    });
+  for (let file of uploadedFiles) {
+    const text = await extractText(file);
+    const structured = analyzeDocument(text, file.name);
+    displayResult(structured);
   }
 
-  uploadedFilesDiv.innerHTML = '';
+  uploadedFiles = [];
+  fileInput.value = "";
 });
+
+// Extract text from PDF or TXT
+async function extractText(file) {
+  if (file.type === "application/pdf") {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    let fullText = "";
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items.map(item => item.str).join(" ");
+      fullText += pageText + " ";
+    }
+
+    return fullText;
+
+  } else {
+    return await file.text();
+  }
+}
+
+// AI-style processing
+function analyzeDocument(text, filename) {
+
+  const cleanedText = text.replace(/\s+/g, " ").trim();
+
+  const title = filename.replace(/\.[^/.]+$/, "").replace(/%20/g, " ");
+
+  const dateMatch = cleanedText.match(/\b\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i);
+  const date = dateMatch ? dateMatch[0] : "Not detected";
+
+  const sector = detectSector(cleanedText);
+
+  const summary = generateSummary(cleanedText);
+
+  return {
+    title,
+    date,
+    sector,
+    summary,
+    fullText: cleanedText.substring(0, 5000) // limit display
+  };
+}
+
+// Keyword-based sector classification
+function detectSector(text) {
+  const lower = text.toLowerCase();
+
+  if (lower.includes("security") || lower.includes("defence") || lower.includes("army")) return "Security";
+  if (lower.includes("finance") || lower.includes("budget") || lower.includes("tax")) return "Finance";
+  if (lower.includes("health") || lower.includes("hospital")) return "Health";
+  if (lower.includes("environment") || lower.includes("nema")) return "Environment";
+  if (lower.includes("education") || lower.includes("school")) return "Education";
+
+  return "General Governance";
+}
+
+// Simple extractive summarizer
+function generateSummary(text) {
+
+  const sentences = text.split(". ");
+  const wordFreq = {};
+  const stopwords = ["the","and","of","to","in","that","for","on","with","as","by","is","at","this","be","are"];
+
+  const words = text.toLowerCase().match(/\b[a-z]{4,}\b/g);
+
+  words.forEach(word => {
+    if (!stopwords.includes(word)) {
+      wordFreq[word] = (wordFreq[word] || 0) + 1;
+    }
+  });
+
+  const sentenceScores = sentences.map(sentence => {
+    let score = 0;
+    const sentenceWords = sentence.toLowerCase().match(/\b[a-z]{4,}\b/g);
+    if (!sentenceWords) return 0;
+
+    sentenceWords.forEach(word => {
+      if (wordFreq[word]) score += wordFreq[word];
+    });
+
+    return score;
+  });
+
+  const ranked = sentences
+    .map((s, i) => ({ sentence: s, score: sentenceScores[i] }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+
+  return ranked.map(r => r.sentence).join(". ") + ".";
+}
+
+// Display result card
+function displayResult(doc) {
+
+  const card = document.createElement("div");
+  card.className = "card";
+
+  card.innerHTML = `
+    <h3>${doc.title}</h3>
+    <p><strong>Date:</strong> ${doc.date}</p>
+    <p><strong>Sector:</strong> ${doc.sector}</p>
+    <p><strong>AI Summary:</strong> ${doc.summary}</p>
+    <details>
+      <summary>View Extracted Text</summary>
+      <p>${doc.fullText}</p>
+    </details>
+    <hr>
+  `;
+
+  resultsDiv.prepend(card);
+}
