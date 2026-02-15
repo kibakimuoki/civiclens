@@ -101,70 +101,52 @@ async function extractText(file) {
 
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
   let fullText = "";
-  const totalPages = pdf.numPages;
+  let ocrPagesUsed = 0;
+  const MAX_OCR_PAGES = 5;
+  const MAX_TOTAL_CHARS = 6000;
 
-  const overlay = document.getElementById("overlay");
-  if (overlay) overlay.style.display = "block";
+  for (let i = 1; i <= pdf.numPages; i++) {
+    try {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      let pageText = content.items.map(item => item.str).join(" ").trim();
 
-  const BATCH_SIZE = 3;
-  const withTimeout = (promise, ms = 8000) =>
-    Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), ms))]);
+      // If almost no selectable text → use OCR
+      if (pageText.length < 50 && ocrPagesUsed < MAX_OCR_PAGES) {
+        console.log("Running OCR on page", i);
+        ocrPagesUsed++;
 
-  for (let batchStart = 1; batchStart <= totalPages; batchStart += BATCH_SIZE) {
-    const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, totalPages);
-    const batchTasks = [];
+        const viewport = page.getViewport({ scale: 1.2 });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
 
-    for (let i = batchStart; i <= batchEnd; i++) {
-      batchTasks.push(
-        withTimeout(
-          (async () => {
-            try {
-              const page = await withTimeout(pdf.getPage(i));
-              let pageText = "";
+        const ctx = canvas.getContext("2d");
+        await page.render({ canvasContext: ctx, viewport }).promise;
 
-              try {
-                const content = await withTimeout(page.getTextContent());
-                pageText = content.items.map(item => item.str).join(" ").trim();
-              } catch {}
+        const ocr = await Tesseract.recognize(canvas, "eng");
+        pageText = ocr.data.text.trim();
+      }
 
-              if (!pageText || pageText.length < 10) {
-                try {
-                  const viewport = page.getViewport({ scale: 1.3 });
-                  const canvas = document.createElement("canvas");
-                  canvas.width = viewport.width;
-                  canvas.height = viewport.height;
-                  const ctx = canvas.getContext("2d");
-                  await withTimeout(page.render({ canvasContext: ctx, viewport }).promise);
+      fullText += pageText + " ";
 
-                  const ocr = await withTimeout(Tesseract.recognize(canvas, "eng"));
-                  pageText = ocr.data.text.trim();
-                } catch (err) {
-                  console.warn("OCR failed on page", i, err);
-                }
-              }
+      // Stop early if we already have enough text
+      if (fullText.length > MAX_TOTAL_CHARS) break;
 
-              fullText += pageText + " ";
-            } catch (err) {
-              console.warn("Page failed:", i, err);
-            } finally {
-              const percent = Math.round((i / totalPages) * 100);
-              progressBar.style.width = percent + "%";
-              progressBar.innerText = `Extracting pages: ${percent}%`;
-              await new Promise(r => setTimeout(r, 0));
-            }
-          })(),
-          10000
-        ).catch(err => console.warn("Page hard-timeout:", err))
-      );
+      const percent = Math.round((i / pdf.numPages) * 100);
+      progressBar.style.width = percent + "%";
+      progressBar.innerText = `Extracting: ${percent}%`;
+
+    } catch (err) {
+      console.warn("Page failed:", err);
     }
-
-    await Promise.allSettled(batchTasks);
   }
 
-  if (overlay) overlay.style.display = "none";
   return fullText.trim();
 }
+
 
 // ==========================
 // CLEAN TEXT
