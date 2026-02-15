@@ -1,4 +1,8 @@
-import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1";
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1";
+
+// Force models to load from CDN instead of /models/
+env.localModelPath = null;
+env.allowLocalModels = false;
 
 const fileInput = document.getElementById("fileInput");
 const processBtn = document.getElementById("processBtn");
