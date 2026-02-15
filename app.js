@@ -165,14 +165,25 @@ function cleanExtractedText(text) {
 function normalizeBillStructure(text) {
   if (!text) return "";
 
-  const objectsMatch = text.match(/OBJECTS AND REASONS[\s\S]{0,2000}/i);
+  // 1. Prefer OBJECTS AND REASONS
+  const objectsMatch = text.match(/OBJECTS AND REASONS[\s\S]{200,3000}/i);
   if (objectsMatch) return objectsMatch[0];
 
-  const billMatch = text.match(/A BILL[\s\S]{0,2500}/i);
+  // 2. Extract real bill content after "A BILL"
+  const billMatch = text.match(/A BILL[\s\S]{200,3000}/i);
   if (billMatch) return billMatch[0];
 
-  return text;
+  // 3. For Hansard - extract debate only
+  const hansardMatch = text.match(/The House met[\s\S]{200,3000}/i);
+  if (hansardMatch) return hansardMatch[0];
+
+  // 4. For Order Papers - extract order section
+  const orderMatch = text.match(/ORDER OF BUSINESS[\s\S]{200,3000}/i);
+  if (orderMatch) return orderMatch[0];
+
+  return text.substring(0, 3000);
 }
+
 
 // ==========================
 // BASIC CLEANING
