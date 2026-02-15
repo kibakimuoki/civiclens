@@ -3,21 +3,82 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CivicLens</title>
+  <title>CivicLens — AI Legislative Transparency</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header>
-    <h1>CivicLens — Legislative Summaries</h1>
+    <h1>CivicLens</h1>
+    <p>AI-powered platform making Kenyan parliamentary records accessible and actionable</p>
+    <nav>
+      <a href="#about">About</a>
+      <a href="#summaries">Summaries</a>
+      <a href="#demo">Demo</a>
+      <a href="#contact">Contact</a>
+    </nav>
   </header>
 
   <main>
+    <!-- About Section -->
+    <section id="about">
+      <h2>About CivicLens</h2>
+      <p>
+        CivicLens transforms dense parliamentary documents into plain-language summaries.
+        Journalists, civic organizations, and citizens can track legislative decisions and community impacts quickly.
+      </p>
+      <p>
+        Our AI pipeline automates scraping, summarization, classification, and indexing of parliamentary reports.
+        This ensures timely, accessible, and actionable civic intelligence at scale.
+      </p>
+    </section>
+
+    <!-- Demo Section -->
+    <section id="demo">
+      <h2>AI in Action</h2>
+      <p>Compare original Hansard text with AI-generated summary:</p>
+      <div class="demo-card">
+        <button id="toggle-btn">Show Original Hansard</button>
+        <div id="demo-content">
+          <p><strong>AI Summary:</strong> Deputy Speaker moves Special Motions based on committee reports, approvals of appointments, and public participation updates in plain language.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Summaries Section -->
     <section id="summaries">
-      <!-- Summaries will appear here -->
+      <h2>Recent Legislative Summaries</h2>
+      <!-- Summaries will be injected here by app.js -->
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact">
+      <h2>Contact / Collaborate</h2>
+      <p>Email: <a href="mailto:muokidan35@gmail.com">muokidan35@gmail.com</a></p>
+      <p>GitHub: <a href="https://github.com/kibakimuoki/civiclens" target="_blank">civiclens repository</a></p>
     </section>
   </main>
 
+  <footer>
+    <p>&copy; 2026 CivicLens / QEMB | Open-source AI for democratic transparency</p>
+  </footer>
+
   <script src="app.js"></script>
+  <script>
+    // Demo toggle button
+    const toggleBtn = document.getElementById('toggle-btn');
+    const demoContent = document.getElementById('demo-content');
+    let showOriginal = false;
+
+    toggleBtn.addEventListener('click', () => {
+      if (showOriginal) {
+        demoContent.innerHTML = '<p><strong>AI Summary:</strong> Deputy Speaker moves Special Motions based on committee reports, approvals of appointments, and public participation updates in plain language.</p>';
+        toggleBtn.textContent = 'Show Original Hansard';
+      } else {
+        demoContent.innerHTML = '<p><strong>Original Hansard:</strong> THAT, taking into consideration the findings of the Departmental Committee on Labour in its report on the approval hearing of a Nominee for Appointment as the Commission Secretary/Chief Executive Officer...</p>';
+        toggleBtn.textContent = 'Show AI Summary';
+      }
+      showOriginal = !showOriginal;
+    });
+  </script>
 </body>
 </html>
-
