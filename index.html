@@ -26,27 +26,24 @@
         CivicLens transforms dense parliamentary documents into plain-language summaries.
         Journalists, civic organizations, and citizens can track legislative decisions and community impacts quickly.
       </p>
+      <p>
+        Our AI pipeline automates scraping, summarization, classification, and indexing of parliamentary reports.
+        Users can also upload PDFs to get instant summaries in the browser.
+      </p>
     </section>
 
     <!-- Upload Section -->
     <section id="upload">
       <h2>Upload Your Document (PDF)</h2>
-      <input type="file" id="pdf-upload" accept=".pdf" multiple />
+      <input type="file" id="pdf-upload" accept="application/pdf" multiple>
       <p>Uploaded PDFs will be summarized and appear below.</p>
-    </section>
-
-    <!-- Search Section -->
-    <section id="search">
-      <h2>Search Summaries</h2>
-      <input type="text" id="search-box" placeholder="Search by keyword, sector, or title..." />
+      <div id="uploaded-summaries"></div>
     </section>
 
     <!-- Summaries Section -->
     <section id="summaries">
       <h2>Recent Legislative Summaries</h2>
-      <div id="summary-cards">
-        <!-- Cards appear here -->
-      </div>
+      <div id="summary-container"></div>
     </section>
 
     <!-- Contact Section -->
@@ -61,7 +58,7 @@
     <p>&copy; 2026 CivicLens / QEMB | Open-source AI for democratic transparency</p>
   </footer>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.9.179/pdf.min.js"></script>
+  <script src="https://mozilla.github.io/pdf.js/build/pdf.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
