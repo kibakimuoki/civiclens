@@ -300,7 +300,7 @@ async function generateSummary(text) {
         max_length: 200,
         do_sample: false
       });
-      summaries.push(res?.[0]?.summary_text || "");
+      summaries.push(res?.[0]?.generated_text || "");
     } catch {
       summaries.push("");
     }
