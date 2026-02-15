@@ -84,13 +84,14 @@ async function extractText(file, fileIndex = 0, totalFiles = 1) {
     const buffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
     let fullText = "";
+    let stepCounter = 0;
+    const totalSteps = pdf.numPages;
 
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
       let pageText = content.items.map(item => item.str).join(" ").trim();
 
-      // OCR if page text is empty or very short
       if (!pageText || pageText.length < 50) {
         const viewport = page.getViewport({ scale: 2 });
         const canvas = document.createElement("canvas");
@@ -110,9 +111,11 @@ async function extractText(file, fileIndex = 0, totalFiles = 1) {
 
       fullText += pageText + " ";
 
-      const pagePercent = Math.round((i / pdf.numPages) * 100);
-      progressBar.style.width = pagePercent + "%";
-      progressBar.innerText = `File ${fileIndex + 1}/${totalFiles}: Page ${i}/${pdf.numPages} (${pagePercent}%)`;
+      // update progress per page
+      stepCounter++;
+      const percent = Math.round((stepCounter / totalSteps) * 100);
+      progressBar.style.width = percent + "%";
+      progressBar.innerText = `Extracting pages: ${percent}%`;
     }
 
     return fullText.trim();
@@ -178,33 +181,42 @@ function detectSector(text) {
 }
 
 // ==========================
-// AI SUMMARY (small chunks)
+// AI SUMMARY (fixed)
 // ==========================
 async function generateSummary(text) {
   text = text.replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
   text = text.replace(/(Disclaimer|National Assembly Debates|Electronic version|Hansard Editor)/gi, "");
 
   const chunks = [];
-  const chunkSize = 800; // smaller to fit model
+  const chunkSize = 500; // safer for T5-small
   for (let i = 0; i < text.length; i += chunkSize) {
     chunks.push(text.slice(i, i + chunkSize));
   }
 
-  let summaries = [];
-  for (let i = 0; i < chunks.length; i++) {
+  const summaries = [];
+  let stepCounter = 0;
+  const totalSteps = chunks.length;
+
+  const summaryPromises = chunks.map(async (chunk, index) => {
     try {
-      const res = await summarizer(chunks[i], { min_length: 50, max_length: 130 });
-      if (res && res[0] && res[0].summary_text) summaries.push(res[0].summary_text);
-
-      const sumPercent = Math.round(((i + 1) / chunks.length) * 100);
-      progressBar.style.width = sumPercent + "%";
-      progressBar.innerText = `Summarizing: ${sumPercent}%`;
+      const res = await summarizer(chunk, { min_length: 50, max_length: 130 });
+      stepCounter++;
+      const percent = Math.round((stepCounter / totalSteps) * 100);
+      progressBar.style.width = percent + "%";
+      progressBar.innerText = `Summarizing: ${percent}%`;
+      return res?.[0]?.summary_text || "";
     } catch (err) {
-      console.warn("Chunk summary failed:", err);
+      console.warn(`Summary failed for chunk ${index}:`, err);
+      stepCounter++;
+      const percent = Math.round((stepCounter / totalSteps) * 100);
+      progressBar.style.width = percent + "%";
+      progressBar.innerText = `Summarizing: ${percent}%`;
+      return "";
     }
-  }
+  });
 
-  return summaries.join(" ");
+  const results = await Promise.allSettled(summaryPromises);
+  return results.map(r => r.status === "fulfilled" ? r.value : "").join(" ");
 }
 
 // ==========================
