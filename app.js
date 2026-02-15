@@ -41,15 +41,12 @@ processBtn.addEventListener("click", async () => {
     }
   }
 
-  const totalFiles = uploadedFiles.length;
-
-  for (let i = 0; i < totalFiles; i++) {
+  for (let i = 0; i < uploadedFiles.length; i++) {
     const file = uploadedFiles[i];
     try {
-      status.innerText = `Processing file ${i + 1}/${totalFiles}: ${file.name}`;
-      const rawText = await extractText(file, i, totalFiles);
+      status.innerText = `Processing file ${i + 1}/${uploadedFiles.length}: ${file.name}`;
+      const rawText = await extractText(file, i, uploadedFiles.length);
       console.log(`Extracted text length for ${file.name}:`, rawText.length);
-      console.log(rawText.slice(0, 500)); // preview first 500 characters
 
       if (!rawText || !rawText.trim()) {
         displayResult({
@@ -70,19 +67,17 @@ processBtn.addEventListener("click", async () => {
       console.error("Failed processing file:", file.name, err);
       status.innerText = `Error processing file: ${file.name}`;
     }
-
-    const percent = Math.round(((i + 1) / totalFiles) * 100);
-    progressBar.style.width = percent + "%";
-    progressBar.innerText = percent + "%";
   }
 
   status.innerText = "Done.";
   uploadedFiles = [];
   fileInput.value = "";
+  progressBar.style.width = "100%";
+  progressBar.innerText = "100%";
 });
 
 // ==========================
-// TEXT EXTRACTION
+// TEXT EXTRACTION (PDF + TXT)
 // ==========================
 async function extractText(file, fileIndex = 0, totalFiles = 1) {
   if (file.type === "application/pdf") {
@@ -95,33 +90,29 @@ async function extractText(file, fileIndex = 0, totalFiles = 1) {
       const content = await page.getTextContent();
       let pageText = content.items.map(item => item.str).join(" ").trim();
 
-      // Only use OCR if page is truly empty
-      if (!pageText) {
-        console.log(`Page ${i} empty, running OCR...`);
+      // OCR if page text is empty or very short
+      if (!pageText || pageText.length < 50) {
         const viewport = page.getViewport({ scale: 2 });
         const canvas = document.createElement("canvas");
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         const context = canvas.getContext("2d");
+
         await page.render({ canvasContext: context, viewport }).promise;
 
-        document.body.appendChild(canvas); // attach canvas temporarily
         try {
           const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
-          const ocrText = text.trim();
-          if (ocrText) pageText = ocrText;
-          console.log(`OCR text length: ${ocrText.length}`);
+          pageText = text.trim();
         } catch (err) {
           console.warn(`OCR failed for page ${i}:`, err);
         }
-        document.body.removeChild(canvas);
       }
 
       fullText += pageText + " ";
 
       const pagePercent = Math.round((i / pdf.numPages) * 100);
       progressBar.style.width = pagePercent + "%";
-      progressBar.innerText = `File ${fileIndex + 1}/${totalFiles}: ${pagePercent}%`;
+      progressBar.innerText = `File ${fileIndex + 1}/${totalFiles}: Page ${i}/${pdf.numPages} (${pagePercent}%)`;
     }
 
     return fullText.trim();
@@ -142,7 +133,7 @@ function cleanText(text) {
 }
 
 // ==========================
-// ANALYZE DOCUMENT
+// DOCUMENT ANALYSIS
 // ==========================
 async function analyzeDocument(text, filename) {
   const title = decodeURIComponent(filename.replace(/\.[^/.]+$/, ""));
@@ -187,24 +178,22 @@ function detectSector(text) {
 }
 
 // ==========================
-// AI SUMMARY
+// AI SUMMARY (small chunks)
 // ==========================
 async function generateSummary(text) {
   text = text.replace(/THE HANSARD[\s\S]+?COMMUNICATION FROM THE CHAIR/i, "");
   text = text.replace(/(Disclaimer|National Assembly Debates|Electronic version|Hansard Editor)/gi, "");
 
   const chunks = [];
-  const chunkSize = 1500;
+  const chunkSize = 800; // smaller to fit model
   for (let i = 0; i < text.length; i += chunkSize) {
     chunks.push(text.slice(i, i + chunkSize));
   }
 
   let summaries = [];
-
   for (let i = 0; i < chunks.length; i++) {
-    const c = chunks[i];
     try {
-      const res = await summarizer(c, { min_length: 50, max_length: 130 });
+      const res = await summarizer(chunks[i], { min_length: 50, max_length: 130 });
       if (res && res[0] && res[0].summary_text) summaries.push(res[0].summary_text);
 
       const sumPercent = Math.round(((i + 1) / chunks.length) * 100);
@@ -215,7 +204,7 @@ async function generateSummary(text) {
     }
   }
 
-  return summaries.length > 0 ? summaries.join(" ") : "";
+  return summaries.join(" ");
 }
 
 // ==========================
