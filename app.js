@@ -87,40 +87,61 @@ async function extractText(file) {
   let fullText = "";
   const totalPages = pdf.numPages;
 
-  for (let i = 1; i <= totalPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    let pageText = content.items.map(item => item.str).join(" ").trim();
+  // Show overlay
+  const overlay = document.getElementById("overlay");
+  overlay.style.display = "block";
 
-    // OCR for empty or short pages
-    if (!pageText || pageText.length < 50) {
-      const viewport = page.getViewport({ scale: 2 });
-      const canvas = document.createElement("canvas");
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const context = canvas.getContext("2d");
-      await page.render({ canvasContext: context, viewport }).promise;
+  // Process pages in batches to avoid freezing
+  const BATCH_SIZE = 3; // 3 pages at a time
+  for (let batchStart = 1; batchStart <= totalPages; batchStart += BATCH_SIZE) {
+    const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, totalPages);
+    const batchPages = [];
 
-      try {
-        const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
-        pageText = text.trim();
-      } catch (err) {
-        console.warn(`OCR failed for page ${i}:`, err);
-      }
+    for (let i = batchStart; i <= batchEnd; i++) {
+      batchPages.push(
+        (async () => {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          let pageText = content.items.map(item => item.str).join(" ").trim();
+
+          // Only run OCR if really empty
+          if (!pageText || pageText.length < 10) {
+            const viewport = page.getViewport({ scale: 1.5 }); // reduced scale
+            const canvas = document.createElement("canvas");
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const context = canvas.getContext("2d");
+            await page.render({ canvasContext: context, viewport }).promise;
+
+            try {
+              const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
+              pageText = text.trim();
+            } catch (err) {
+              console.warn(`OCR failed for page ${i}:`, err);
+            }
+          }
+
+          fullText += pageText + " ";
+
+          // Update progress bar and yield
+          const percent = Math.round((i / totalPages) * 100);
+          progressBar.style.width = percent + "%";
+          progressBar.innerText = `Extracting pages: ${percent}%`;
+          await new Promise(r => setTimeout(r, 0)); // allow UI to refresh
+        })()
+      );
     }
 
-    fullText += pageText + " ";
-
-    // yield to browser for UI update
-    await new Promise(r => setTimeout(r, 0));
-
-    const percent = Math.round((i / totalPages) * 100);
-    progressBar.style.width = percent + "%";
-    progressBar.innerText = `Extracting pages: ${percent}%`;
+    // Wait for batch to finish
+    await Promise.allSettled(batchPages);
   }
+
+  // Hide overlay when done
+  overlay.style.display = "none";
 
   return fullText.trim();
 }
+
 
 // ==========================
 // CLEAN TEXT
