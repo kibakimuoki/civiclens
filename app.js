@@ -4,6 +4,8 @@ const fileInput = document.getElementById("fileInput");
 const processBtn = document.getElementById("processBtn");
 const resultsDiv = document.getElementById("results");
 const status = document.getElementById("status");
+const progressContainer = document.getElementById("progressContainer");
+const progressBar = document.getElementById("progressBar");
 
 let uploadedFiles = [];
 let summarizer = null;
@@ -26,6 +28,10 @@ processBtn.addEventListener("click", async () => {
     return;
   }
 
+  progressContainer.style.display = "block";
+  progressBar.style.width = "0%";
+  progressBar.innerText = "0%";
+
   status.innerText = "Loading AI model (first time takes ~20s)...";
 
   if (!summarizer) {
@@ -39,10 +45,14 @@ processBtn.addEventListener("click", async () => {
 
   status.innerText = "Processing documents...";
 
-  for (let file of uploadedFiles) {
+  const totalFiles = uploadedFiles.length;
+
+  for (let i = 0; i < totalFiles; i++) {
+    const file = uploadedFiles[i];
     try {
       console.log("Processing file:", file.name);
-      const rawText = await extractText(file);
+      status.innerText = `Processing file ${i + 1} of ${totalFiles}: ${file.name}`;
+      const rawText = await extractText(file, i, totalFiles);
       const cleaned = cleanText(rawText);
       const structured = await analyzeDocument(cleaned, file.name);
       displayResult(structured);
@@ -50,6 +60,9 @@ processBtn.addEventListener("click", async () => {
       console.error("Failed processing file:", file.name, err);
       status.innerText = `Error processing file: ${file.name}`;
     }
+    const percent = Math.round(((i + 1) / totalFiles) * 100);
+    progressBar.style.width = percent + "%";
+    progressBar.innerText = percent + "%";
   }
 
   status.innerText = "Done.";
@@ -58,13 +71,12 @@ processBtn.addEventListener("click", async () => {
 });
 
 // ==========================
-// TEXT EXTRACTION (PDF/TXT)
+// TEXT EXTRACTION (PDF/TXT) with per-page progress
 // ==========================
-async function extractText(file) {
+async function extractText(file, fileIndex = 0, totalFiles = 1) {
   if (file.type === "application/pdf") {
     const buffer = await file.arrayBuffer();
     const pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
-
     let fullText = "";
 
     for (let i = 1; i <= pdf.numPages; i++) {
@@ -72,7 +84,7 @@ async function extractText(file) {
       const content = await page.getTextContent();
       let pageText = content.items.map(item => item.str).join(" ");
 
-      // OCR fallback if page has no text
+      // OCR fallback
       if (!pageText.trim()) {
         const viewport = page.getViewport({ scale: 2 });
         const canvas = document.createElement("canvas");
@@ -85,10 +97,14 @@ async function extractText(file) {
       }
 
       fullText += pageText + " ";
+
+      // Update progress for multi-page PDFs
+      const pagePercent = Math.round((i / pdf.numPages) * 100);
+      progressBar.style.width = pagePercent + "%";
+      progressBar.innerText = `File ${fileIndex + 1}/${totalFiles}: ${pagePercent}%`;
     }
 
     return fullText;
-
   } else {
     return await file.text();
   }
@@ -111,7 +127,6 @@ function cleanText(text) {
 async function analyzeDocument(text, filename) {
   const title = decodeURIComponent(filename.replace(/\.[^/.]+$/, ""));
   const date = extractDate(text) || "Not detected";
-  const docType = detectDocumentType(text);
   const sector = detectSector(text);
 
   let summary = "No summary available.";
@@ -185,10 +200,16 @@ async function generateSummary(text) {
   const chunks = chunkText(text, 1500);
   let summaries = [];
 
-  for (let c of chunks) {
+  for (let i = 0; i < chunks.length; i++) {
+    const c = chunks[i];
     try {
       const res = await summarizer(c, { min_length: 50, max_length: 130 });
       if (res && res[0] && res[0].summary_text) summaries.push(res[0].summary_text);
+
+      // Update progress for summarization
+      const sumPercent = Math.round(((i + 1) / chunks.length) * 100);
+      progressBar.style.width = sumPercent + "%";
+      progressBar.innerText = `Summarizing: ${sumPercent}%`;
     } catch (err) {
       console.warn("Chunk summary failed:", err);
     }
