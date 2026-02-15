@@ -1,87 +1,71 @@
-// Store summaries
-let summaries = [];
-
-// Load default dataset
-async function loadDataset() {
+// Load existing summaries from JSON
+async function loadSummaries() {
   try {
     const response = await fetch('summaries.json');
-    const data = await response.json();
-    summaries.push(...data);
-    displaySummaries(summaries);
+    const summaries = await response.json();
+    const container = document.getElementById('summary-container');
+    container.innerHTML = '';
+
+    summaries.forEach(doc => {
+      const card = document.createElement('div');
+      card.className = 'summary-card';
+      card.innerHTML = `
+        <h3>${doc.title}</h3>
+        <p><strong>Date:</strong> ${doc.date || 'N/A'}</p>
+        <p><strong>Sector:</strong> ${doc.sector || 'N/A'}</p>
+        <p>${doc.summary}</p>
+        <a href="${doc.source_file}" target="_blank">View Source</a>
+      `;
+      container.appendChild(card);
+    });
   } catch (err) {
-    console.error('Error loading dataset:', err);
+    console.error('Error loading summaries:', err);
   }
 }
 
-// Display summaries
-function displaySummaries(list) {
-  const container = document.getElementById('summary-cards');
-  container.innerHTML = '';
-  list.forEach(doc => {
-    const card = document.createElement('div');
-    card.className = 'summary-card';
-    card.innerHTML = `
-      <h3>${doc.title}</h3>
-      <p><strong>Date:</strong> ${doc.date || 'N/A'}</p>
-      <p><strong>Sector:</strong> ${doc.sector || 'N/A'}</p>
-      <p>${doc.summary}</p>
-      <a href="${doc.source_file || '#'}" target="_blank">View Source</a>
-    `;
-    container.appendChild(card);
-  });
-}
-
-// Search functionality
-document.getElementById('search-box').addEventListener('input', e => {
-  const term = e.target.value.toLowerCase();
-  const filtered = summaries.filter(s =>
-    s.title.toLowerCase().includes(term) ||
-    (s.sector && s.sector.toLowerCase().includes(term)) ||
-    (s.summary && s.summary.toLowerCase().includes(term)) ||
-    (s.keywords && s.keywords.join(' ').toLowerCase().includes(term))
-  );
-  displaySummaries(filtered);
-});
-
-// Handle PDF uploads
-document.getElementById('pdf-upload').addEventListener('change', async e => {
-  const files = Array.from(e.target.files);
-  for (let file of files) {
-    const text = await extractPDFText(file);
-    const summary = summarizeText(text); // Simple AI placeholder
-    const doc = {
-      id: file.name,
-      title: file.name,
-      date: 'N/A',
-      sector: 'N/A',
-      summary,
-      source_file: '#'
-    };
-    summaries.unshift(doc);
-    displaySummaries(summaries);
-  }
-});
-
-// Extract text from PDF using PDF.js
-async function extractPDFText(file) {
+// PDF summarization (client-side)
+async function summarizePDF(file) {
+  const pdfjsLib = window['pdfjs-dist/build/pdf'];
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://mozilla.github.io/pdf.js/build/pdf.worker.js';
+  
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+  const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+
   let fullText = '';
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    const strings = content.items.map(item => item.str);
-    fullText += strings.join(' ') + '\n';
+    const pageText = content.items.map(item => item.str).join(' ');
+    fullText += pageText + '\n\n';
   }
-  return fullText;
+
+  return simpleSummarizer(fullText);
 }
 
-// Very simple AI-style summarizer
-function summarizeText(text) {
-  // Simple: take first 3 sentences
+// Simple summarizer (extract first 3 sentences)
+function simpleSummarizer(text) {
   const sentences = text.match(/[^\.!\?]+[\.!\?]+/g) || [];
   return sentences.slice(0, 3).join(' ');
 }
 
+// Handle PDF uploads
+const pdfInput = document.getElementById('pdf-upload');
+pdfInput.addEventListener('change', async (event) => {
+  const container = document.getElementById('uploaded-summaries');
+  container.innerHTML = '';
+
+  const files = Array.from(event.target.files);
+  for (const file of files) {
+    const summary = await summarizePDF(file);
+    const card = document.createElement('div');
+    card.className = 'summary-card';
+    card.innerHTML = `
+      <h3>${file.name}</h3>
+      <p><strong>Summary:</strong> ${summary}</p>
+    `;
+    container.appendChild(card);
+  }
+});
+
 // Initialize
-document.addEventListener('DOMContentLoaded', loadDataset);
+document.addEventListener('DOMContentLoaded', loadSummaries);
