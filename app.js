@@ -229,19 +229,51 @@ function cleanBill(text) {
 }
 
 function cleanHansard(text) {
+  if (!text) return "";
+
   return text
-    .replace(/Disclaimer[\s\S]{0,500}?Hansard Editor\./gi, "")
-    .replace(/THE HANSARD[\s\S]{0,200}?The House met/gi, "The House met")
 
-    // Remove ANY bracketed stage direction like:
-    // [Applause], [Laughter], [Interruption], etc.
-    .replace(/\[\s*[A-Za-z\s]+\s*\]/g, "")
+    // Remove Gazette headers
+    .replace(/REPUBLIC OF KENYA[\s\S]{0,500}?NATIONAL ASSEMBLY/gi, "")
 
+    // Remove House opening formalities
+    .replace(/The House met at[\s\S]{0,300}?PRAYERS/gi, "")
+
+    // Remove QUORUM sections
+    .replace(/QUORUM[\s\S]{0,500}?quorum to transact business\./gi, "")
+
+    // Remove Communications from Chair blocks
+    .replace(/COMMUNICATION FROM THE CHAIR[\s\S]{0,3000}?Thank you\./gi, "")
+
+    // Remove recess announcements
+    .replace(/long recess[\s\S]{0,1000}?January\s*\./gi, "")
+
+    // Remove applause / laughter
+    .replace(/\[\s*Applause\s*\]/gi, "")
+    .replace(/\[\s*Laughter\s*\]/gi, "")
+
+    // Remove Quorum Bell
     .replace(/\(The Quorum Bell was rung\)/gi, "")
+
+    // Remove volume numbers
     .replace(/Vol\.\s*[IVXLC]+\s*No\.\s*\d+/gi, "")
+
+    // Fix OCR broken spacing (e.g. Wetang ula → Wetangula)
+    .replace(/\b([A-Za-z])\s+([a-z]{2,})\b/g, "$1$2")
+
+    // Fix split capital words (Q UORUM → QUORUM)
+    .replace(/\b([A-Z])\s+([A-Z]{2,})\b/g, "$1$2")
+
+    // Remove excessive whitespace
     .replace(/\s{2,}/g, " ")
+
+    // Remove repeated section titles
+    .replace(/NATIONAL ASSEMBLY DEBATES/gi, "")
+
+    // Trim
     .trim();
 }
+
 
 
 
