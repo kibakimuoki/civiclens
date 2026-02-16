@@ -1,8 +1,9 @@
 // ======================================================
-// CIVICLENS v2 — PRODUCTION PIPELINE (DROP-IN REPLACEMENT)
+// CIVICLENS v2 — PRODUCTION PIPELINE (UPDATED)
 // ======================================================
 
 import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1";
+
 // REQUIRED FOR PDF.JS TO WORK PROPERLY
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
@@ -125,7 +126,12 @@ async function processSingleFile(file) {
   // Extract date
   // ---------------------------
   let date = extractDate(cleanedText);
-  if (date) date = fixOCRDate(date);
+  if (!date) {
+    // Fallback: try first line (common in Hansard/Order Paper)
+    const firstLine = cleanedText.split("\n")[0];
+    const fallback = firstLine.match(/\d{1,2}\s*[A-Za-z]{3,9}\s*\d{4}/);
+    date = fallback ? fixOCRDate(fallback[0]) : "Not detected";
+  }
 
   // ---------------------------
   // Detect sector
@@ -145,7 +151,7 @@ async function processSingleFile(file) {
 
   return {
     title: file.name.replace(/\.[^/.]+$/, ""),
-    date: date || "Not detected",
+    date: date,
     sector,
     summary,
     fullText: cleanedText.slice(0, 8000)
@@ -165,7 +171,8 @@ function normalizeWhitespace(text) {
 
 function normalizeOCRText(text) {
   return text
-    .replace(/[^a-zA-Z0-9.,;:\s]/g, " ")
+    // keep letters, numbers, commas, periods, dashes, colons, slashes, spaces
+    .replace(/[^a-zA-Z0-9.,;:/\-\s]/g, " ")
     .replace(/(\d)\s+(\d)/g, "$1$2")
     .replace(/([A-Za-z])\s+([a-z])/g, "$1 $2")
     .replace(/\s{2,}/g, " ")
@@ -182,7 +189,8 @@ function fixOCRDate(dateStr) {
     "JANUARY": "January", "FEBRURY": "February", "FEBRURAY": "February",
     "MARH": "March", "APIL": "April", "JUNE": "June", "JULY": "July",
     "AUGUST": "August", "SEPTEMBER": "September", "OCTOBER": "October",
-    "NOVEMBER": "November", "DECEMBER": "December"
+    "NOVEMBER": "November", "DECEMBER": "December", "DECEMBR": "December",
+    "DECMEBER": "December"
   };
   for (let [wrong, correct] of Object.entries(monthFixes)) {
     const regex = new RegExp(wrong, "i");
@@ -277,11 +285,13 @@ async function extractTextFromFile(file, type) {
   }
 }
 
+// === TXT ===
 async function extractFromTXT(file) {
   const text = await file.text();
   return { success: text.trim().length > 0, rawText: text };
 }
 
+// === IMAGE ===
 async function extractFromImage(file) {
   const img = await createImageBitmap(file);
   const canvas = document.createElement("canvas");
@@ -293,6 +303,7 @@ async function extractFromImage(file) {
   return { success: ocr.data.text.trim().length > 30, rawText: ocr.data.text };
 }
 
+// === PDF ===
 async function extractFromPDF(file) {
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
@@ -357,19 +368,14 @@ function classifyDocument(text) {
 function extractDate(text) {
   const cleaned = text.replace(/\s+/g, " ").trim();
   const patterns = [
-    /\b\d{1,2}\s*(st|nd|rd|th)?\s*(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
-    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}\b/i,
-    /\b\d{1,2}\s*(?:t\s*h|s\s*t|n\s*d|r\s*d)?\s*(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i
+    /\b\d{1,2}(?:st|nd|rd|th)?\s*[A-Za-z]{3,9}\s*\d{4}\b/i, // 4th December 2025
+    /\b[A-Za-z]{3,9}\s*\d{1,2},?\s*\d{4}\b/i,               // December 4, 2025
+    /\b\d{1,2}\/\d{1,2}\/\d{4}\b/i                           // 04/12/2025
   ];
 
-  let allMatches = [];
-  patterns.forEach(p => {
-    const matches = cleaned.matchAll(p);
-    for (const m of matches) allMatches.push(m[0]);
-  });
-
-  if (allMatches.length > 0) {
-    return allMatches.find(d => d.includes("2025")) || allMatches[0];
+  for (const p of patterns) {
+    const match = cleaned.match(p);
+    if (match) return fixOCRDate(match[0]);
   }
 
   return null;
