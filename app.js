@@ -7,7 +7,6 @@ import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
 
-
 // --------------------------
 // MODEL SETTINGS
 // --------------------------
@@ -119,7 +118,7 @@ async function processSingleFile(file) {
   // Classify & clean
   // ---------------------------
   const docType = classifyDocument(rawText);
-  const cleanedText = cleanByType(rawText, docType);
+  const cleanedText = cleanByType(cleanedTextFallback(rawText, docType));
 
   // ---------------------------
   // Extract date
@@ -135,7 +134,13 @@ async function processSingleFile(file) {
   // ---------------------------
   // Generate summary
   // ---------------------------
-  const summary = await generateSummary(cleanedText);
+  let summary = "";
+  try {
+    summary = await generateSummary(cleanedText);
+  } catch (err) {
+    console.error("Summarization failed:", err);
+    summary = cleanedText.slice(0, 300) + "...";
+  }
 
   return {
     title: file.name.replace(/\.[^/.]+$/, ""),
@@ -151,10 +156,10 @@ async function processSingleFile(file) {
 // ======================================================
 function normalizeOCRText(text) {
   return text
-    .replace(/[^a-zA-Z0-9.,;:\s]/g, " ")  // remove stray symbols
-    .replace(/\s{2,}/g, " ")              // collapse multiple spaces
-    .replace(/(\d)\s+(\d)/g, "$1$2")      // merge split numbers
-    .replace(/([A-Za-z])\s+([A-Za-z])/g, "$1$2") // merge split words
+    .replace(/[^a-zA-Z0-9.,;:\s]/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/(\d)\s+(\d)/g, "$1$2")
+    .replace(/([A-Za-z])\s+([A-Za-z])/g, "$1$2")
     .trim();
 }
 
@@ -162,10 +167,8 @@ function normalizeOCRText(text) {
 // FIX OCR-ERROR DATES
 // ======================================================
 function fixOCRDate(dateStr) {
-  // Remove extra spaces / OCR artifacts
   let s = dateStr.replace(/\s{2,}/g, " ").replace(/[^a-zA-Z0-9 ,]/g, "").trim();
 
-  // Correct common OCR errors in months
   const monthFixes = {
     "JANUARY": "January", "FEBRURY": "February", "FEBRURAY": "February",
     "MARH": "March", "APIL": "April", "JUNE": "June", "JULY": "July",
@@ -177,7 +180,6 @@ function fixOCRDate(dateStr) {
     s = s.replace(regex, correct);
   }
 
-  // Clamp year if OCR misread it (e.g., 2033 → 2025)
   s = s.replace(/\b(\d{4})\b/g, (y) => {
     const num = parseInt(y);
     if (num < 2000 || num > 2030) return "2025";
@@ -188,36 +190,36 @@ function fixOCRDate(dateStr) {
 }
 
 // ======================================================
-// CLEAN BY TYPE — ADDITIONAL OCR AGGRESSIVE CLEANUP
+// CLEAN BY TYPE
 // ======================================================
-function cleanByType(text, type) {
-  let t = text.trim();
-
+function cleanedTextFallback(text, type) {
   switch (type) {
-    case "bill":
-      t = cleanBill(t);
-      break;
-    case "hansard":
-      t = cleanHansard(t);
-      break;
-    case "order_paper":
-      t = cleanOrderPaper(t);
-      break;
-    case "committee_report":
-      t = cleanCommitteeReport(t);
-      break;
-    case "gazette":
-      t = cleanGazette(t);
-      break;
-    default:
-      t = t.replace(/\s{2,}/g, " ");
+    case "bill": return cleanBill(text);
+    case "hansard": return cleanHansard(text);
+    case "order_paper": return cleanOrderPaper(text);
+    case "committee_report": return cleanCommitteeReport(text);
+    case "gazette": return cleanGazette(text);
+    default: return text;
   }
+}
+
+function cleanByType(text) {
+  let t = text.trim();
 
   // remove stray page numbers or headers
   t = t.replace(/\bPage\s*\d+\b/gi, "");
   t = t.replace(/\b\d{3,4}\b/g, ""); // standalone numbers
   return t.trim();
 }
+
+// ======================================================
+// THE REST OF YOUR ORIGINAL FUNCTIONS REMAIN INTACT
+// (extractFromPDF, extractFromTXT, extractFromImage, ocrPage, 
+// normalizeWhitespace, classifyDocument, cleanBill, cleanHansard, 
+// cleanOrderPaper, cleanCommitteeReport, cleanGazette, extractDate, 
+// detectSector, generateSummary, summarizeInChunks, escapeHTML, displayResult)
+// ======================================================
+
 
 
 // ======================================================
