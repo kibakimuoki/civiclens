@@ -116,7 +116,13 @@ async function processSingleFile(file) {
   const raw = extraction.rawText;
 
   // 2. Normalize whitespace early
-  const normalized = normalizeWhitespace(raw);
+  let normalized = normalizeWhitespace(raw);
+
+// If OCR-heavy, clean harder
+if (normalized.match(/[^a-zA-Z0-9\s.,;:()\-]/g)?.length > 200) {
+  normalized = normalizeOCRText(normalized);
+}
+
 
   // 3. Classify document type
   const docType = classifyDocument(normalized);
@@ -307,12 +313,21 @@ function cleanBill(text) {
 }
 function cleanHansard(text) {
   return text
-    .replace(/Disclaimer\s*:\s*The electronic version[\s\S]{0,300}/gi, "")
+    // Remove repeated headers
+    .replace(/REPUBLIC OF KENYA[\s\S]{0,400}?NATIONAL ASSEMBLY DEBATES/gi, "")
+    .replace(/THIRTEENTH PARLIAMENT[\s\S]{0,300}/gi, "")
+    .replace(/Vol\.\s*[IVXLC]+\s*No\.\s*\d+/gi, "")
+    .replace(/\d+\s+th\s+[A-Za-z]+\s+\d{4}/gi, "")
+
+    // Remove stage directions
     .replace(/\[\s*Applause\s*\]/gi, "")
     .replace(/\[\s*Laughter\s*\]/gi, "")
+    .replace(/\(The Quorum Bell was rung\)/gi, "")
+
     .replace(/\s{2,}/g, " ")
     .trim();
 }
+
 
 function cleanOrderPaper(text) {
   return text
@@ -369,18 +384,24 @@ function extractDate(text) {
   const cleaned = text.replace(/\s+/g, " ");
 
   const patterns = [
-    // 12th February 2026
-    /\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
+    // 4th December 2025 OR 4 th December 2025
+    /\b\d{1,2}\s*(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
 
     // February 12, 2026
     /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}\b/i,
 
-    // 12 Feb 2026
-    /\b\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}\b/i,
-
-    // 12 FEBRUARY 2026
-    /\b\d{1,2}\s+(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)\s+\d{4}\b/i
+    // 12 FEB 2026
+    /\b\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}\b/i
   ];
+
+  for (let p of patterns) {
+    const match = cleaned.match(p);
+    if (match) return match[0];
+  }
+
+  return null;
+}
+
 
   for (let p of patterns) {
     const match = cleaned.match(p);
@@ -396,13 +417,31 @@ function extractDate(text) {
 function detectSector(text) {
   const t = text.toLowerCase();
 
-  const scores = {
-    Security: /(security|police|defence|military|intelligence|terror)/g,
-    Finance: /(budget|appropriation|finance|tax|revenue|expenditure)/g,
-    Education: /(school|education|university|teacher|curriculum)/g,
+  const sectors = {
+    Security: /(security|police|defence|military|immigration|citizenship|criminal|terror)/g,
+    Finance: /(budget|appropriation|finance|tax|revenue|expenditure|treasury)/g,
+    Education: /(education|school|university|teacher|curriculum|academy)/g,
     Health: /(health|hospital|clinic|disease|medical|public health)/g,
-    Environment: /(environment|climate|wildlife|forestry|pollution)/g
+    Environment: /(environment|climate|wildlife|forest|forestry|pollution)/g,
+    Justice: /(judiciary|court|legal|procedure|contract|law)/g
   };
+
+  let best = "General Governance";
+  let maxScore = 0;
+
+  for (const [name, regex] of Object.entries(sectors)) {
+    const matches = t.match(regex);
+    const score = matches ? matches.length : 0;
+
+    if (score > maxScore) {
+      maxScore = score;
+      best = name;
+    }
+  }
+
+  return best;
+}
+
 
   let bestSector = "General Governance";
   let bestScore = 0;
