@@ -1,5 +1,5 @@
 // ======================================================
-// CIVICLENS v2 — PRODUCTION PIPELINE (UPDATED)
+// CIVICLENS v2 — PRODUCTION PIPELINE (UPDATED, FIXED)
 // ======================================================
 
 import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1";
@@ -74,7 +74,7 @@ processBtn.addEventListener("click", async () => {
     } catch (err) {
       console.error("Error processing file:", file.name, err);
       displayResult({
-        title: file.name,
+        title: file.name.replace(/\.[^/.]+$/, ""),
         date: "Unknown",
         sector: "Unknown",
         summary: "CivicLens encountered an error while processing this file.",
@@ -237,8 +237,16 @@ function cleanHansard(text) {
   return text
     .replace(/Disclaimer[\s\S]{0,500}?Hansard Editor\./gi, "")
     .replace(/THE HANSARD[\s\S]{0,200}?The House met/gi, "The House met")
-    .replace(/\[\s*Applause\s*\]/gi, "")
-    .replace(/\[\s*Laughter\s*\]/gi, "")
+    .replace(/
+
+\[\s*Applause\s*\]
+
+/gi, "")
+    .replace(/
+
+\[\s*Laughter\s*\]
+
+/gi, "")
     .replace(/\(The Quorum Bell was rung\)/gi, "")
     .replace(/Vol\.\s*[IVXLC]+\s*No\.\s*\d+/gi, "")
     .replace(/\s{2,}/g, " ")
@@ -316,15 +324,26 @@ async function extractFromPDF(file) {
   for (let i = 1; i <= pdf.numPages; i++) {
     try {
       const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      let pageText = content.items.map(item => item.str).join(" ").trim();
 
+      let pageText = "";
+
+      // Try native text extraction first
+      try {
+        const content = await page.getTextContent();
+        pageText = content.items.map(item => item.str).join(" ").trim();
+      } catch (err) {
+        console.warn("Text extraction failed on page, will try OCR if allowed:", err);
+        pageText = "";
+      }
+
+      // Fallback to OCR if text is too short or corrupted
       if ((pageText.length < 100 || /[\uFFFD]/.test(pageText)) && ocrUsed < MAX_OCR_PAGES) {
         ocrUsed++;
         pageText = await ocrPage(page);
       }
 
-      fullText += pageText + "\n";
+      fullText += (pageText || "") + "\n";
+
       if (fullText.length > MAX_TOTAL_CHARS) break;
 
       const percent = Math.round((i / pdf.numPages) * 100);
@@ -332,10 +351,12 @@ async function extractFromPDF(file) {
       progressBar.innerText = `Extracting: ${percent}%`;
     } catch (err) {
       console.warn("PDF page failed:", err);
+      // continue to next page
     }
   }
 
-  return { success: fullText.trim().length > 50, rawText: fullText };
+  // Mark success as true if we got any text at all
+  return { success: fullText.trim().length > 10, rawText: fullText };
 }
 
 async function ocrPage(page) {
