@@ -113,7 +113,7 @@ async function processSingleFile(file) {
   // ---------------------------
   rawText = normalizeWhitespace(rawText);
   rawText = normalizeOCRText(rawText);
-  rawText = rawText.replace(/\n+/g, " ").trim(); // <-- NEW: remove line breaks for dates & summarization
+  rawText = rawText.replace(/\n+/g, " ").trim(); // collapse line breaks for OCRed text
 
   // ---------------------------
   // Classify & clean
@@ -165,10 +165,10 @@ function normalizeWhitespace(text) {
 
 function normalizeOCRText(text) {
   return text
-    .replace(/[^a-zA-Z0-9.,;:\s]/g, " ")        // remove weird characters
-    .replace(/(\d)\s+(\d)/g, "$1$2")            // join split numbers
-    .replace(/([A-Za-z])\s+([a-z])/g, "$1 $2")  // keep space between letters
-    .replace(/\s{2,}/g, " ")                    // collapse multiple spaces
+    .replace(/[^a-zA-Z0-9.,;:\s]/g, " ")
+    .replace(/(\d)\s+(\d)/g, "$1$2")
+    .replace(/([A-Za-z])\s+([a-z])/g, "$1 $2")
+    .replace(/\s{2,}/g, " ")
     .trim();
 }
 
@@ -308,7 +308,6 @@ async function extractFromPDF(file) {
       const content = await page.getTextContent();
       let pageText = content.items.map(item => item.str).join(" ").trim();
 
-      // NEW: OCR threshold more lenient & detect broken chars
       if ((pageText.length < 100 || /[\uFFFD]/.test(pageText)) && ocrUsed < MAX_OCR_PAGES) {
         ocrUsed++;
         pageText = await ocrPage(page);
@@ -353,22 +352,24 @@ function classifyDocument(text) {
 }
 
 // ======================================================
-// DATE EXTRACTION
+// DATE EXTRACTION (UPDATED)
 // ======================================================
 function extractDate(text) {
   const cleaned = text.replace(/\s+/g, " ").trim();
-
   const patterns = [
-    /\b\d{1,2}\s*(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
+    /\b\d{1,2}\s*(st|nd|rd|th)?\s*(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
     /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}\b/i,
-    /\b\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}\b/i,
-    // NEW: Weekday-based dates
-    /\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s*\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i
+    /\b\d{1,2}\s*(?:t\s*h|s\s*t|n\s*d|r\s*d)?\s*(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i
   ];
 
-  for (let p of patterns) {
-    const match = cleaned.match(p);
-    if (match) return match[0];
+  let allMatches = [];
+  patterns.forEach(p => {
+    const matches = cleaned.matchAll(p);
+    for (const m of matches) allMatches.push(m[0]);
+  });
+
+  if (allMatches.length > 0) {
+    return allMatches.find(d => d.includes("2025")) || allMatches[0];
   }
 
   return null;
