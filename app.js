@@ -91,45 +91,134 @@ processBtn.addEventListener("click", async () => {
 });
 
 // ======================================================
-// PROCESS SINGLE FILE
+// PROCESS SINGLE FILE — IMPROVED
 // ======================================================
 async function processSingleFile(file) {
   const fileType = detectFileType(file);
   const extraction = await extractTextFromFile(file, fileType);
 
-  if (!extraction.success || extraction.rawText.trim().length < 80) {
+  let rawText = extraction.rawText || "";
+
+  if (!extraction.success || rawText.trim().length < 80) {
     return {
       title: file.name.replace(/\.[^/.]+$/, ""),
       date: "Unknown",
       sector: "Unknown",
       summary: "CivicLens could not extract meaningful text from this document.",
-      fullText: extraction.rawText.slice(0, 500)
+      fullText: rawText.slice(0, 500)
     };
   }
 
-  const raw = extraction.rawText;
-  let normalized = normalizeWhitespace(raw);
+  // ---------------------------
+  // Normalize OCR / whitespace
+  // ---------------------------
+  rawText = normalizeWhitespace(rawText);
+  rawText = normalizeOCRText(rawText);
 
-  if (normalized.match(/[^a-zA-Z0-9\s.,;:()\-]/g)?.length > 200) {
-    normalized = normalizeOCRText(normalized);
-  }
+  // ---------------------------
+  // Classify & clean
+  // ---------------------------
+  const docType = classifyDocument(rawText);
+  const cleanedText = cleanByType(rawText, docType);
 
-  const docType = classifyDocument(normalized);
-  const cleaned = cleanByType(normalized, docType);
+  // ---------------------------
+  // Extract date
+  // ---------------------------
+  let date = extractDate(cleanedText);
+  if (date) date = fixOCRDate(date);
 
-  const title = file.name.replace(/\.[^/.]+$/, "");
-  const date = extractDate(cleaned) || "Not detected";
-  const sector = detectSector(cleaned);
-  const summary = await generateSummary(cleaned);
+  // ---------------------------
+  // Detect sector
+  // ---------------------------
+  const sector = detectSector(cleanedText);
+
+  // ---------------------------
+  // Generate summary
+  // ---------------------------
+  const summary = await generateSummary(cleanedText);
 
   return {
-    title,
-    date,
+    title: file.name.replace(/\.[^/.]+$/, ""),
+    date: date || "Not detected",
     sector,
     summary,
-    fullText: cleaned.slice(0, 8000)
+    fullText: cleanedText.slice(0, 8000)
   };
 }
+
+// ======================================================
+// OCR TEXT NORMALIZATION
+// ======================================================
+function normalizeOCRText(text) {
+  return text
+    .replace(/[^a-zA-Z0-9.,;:\s]/g, " ")  // remove stray symbols
+    .replace(/\s{2,}/g, " ")              // collapse multiple spaces
+    .replace(/(\d)\s+(\d)/g, "$1$2")      // merge split numbers
+    .replace(/([A-Za-z])\s+([A-Za-z])/g, "$1$2") // merge split words
+    .trim();
+}
+
+// ======================================================
+// FIX OCR-ERROR DATES
+// ======================================================
+function fixOCRDate(dateStr) {
+  // Remove extra spaces / OCR artifacts
+  let s = dateStr.replace(/\s{2,}/g, " ").replace(/[^a-zA-Z0-9 ,]/g, "").trim();
+
+  // Correct common OCR errors in months
+  const monthFixes = {
+    "JANUARY": "January", "FEBRURY": "February", "FEBRURAY": "February",
+    "MARH": "March", "APIL": "April", "JUNE": "June", "JULY": "July",
+    "AUGUST": "August", "SEPTEMBER": "September", "OCTOBER": "October",
+    "NOVEMBER": "November", "DECEMBER": "December"
+  };
+  for (let [wrong, correct] of Object.entries(monthFixes)) {
+    const regex = new RegExp(wrong, "i");
+    s = s.replace(regex, correct);
+  }
+
+  // Clamp year if OCR misread it (e.g., 2033 → 2025)
+  s = s.replace(/\b(\d{4})\b/g, (y) => {
+    const num = parseInt(y);
+    if (num < 2000 || num > 2030) return "2025";
+    return y;
+  });
+
+  return s;
+}
+
+// ======================================================
+// CLEAN BY TYPE — ADDITIONAL OCR AGGRESSIVE CLEANUP
+// ======================================================
+function cleanByType(text, type) {
+  let t = text.trim();
+
+  switch (type) {
+    case "bill":
+      t = cleanBill(t);
+      break;
+    case "hansard":
+      t = cleanHansard(t);
+      break;
+    case "order_paper":
+      t = cleanOrderPaper(t);
+      break;
+    case "committee_report":
+      t = cleanCommitteeReport(t);
+      break;
+    case "gazette":
+      t = cleanGazette(t);
+      break;
+    default:
+      t = t.replace(/\s{2,}/g, " ");
+  }
+
+  // remove stray page numbers or headers
+  t = t.replace(/\bPage\s*\d+\b/gi, "");
+  t = t.replace(/\b\d{3,4}\b/g, ""); // standalone numbers
+  return t.trim();
+}
+
 
 // ======================================================
 // FILE TYPE DETECTION
