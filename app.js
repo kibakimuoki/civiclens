@@ -3,6 +3,10 @@
 // ======================================================
 
 import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1";
+// REQUIRED FOR PDF.JS TO WORK PROPERLY
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+
 
 // --------------------------
 // MODEL SETTINGS
