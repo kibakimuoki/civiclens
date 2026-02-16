@@ -212,15 +212,6 @@ function cleanByType(text) {
   return t.trim();
 }
 
-// ======================================================
-// THE REST OF YOUR ORIGINAL FUNCTIONS REMAIN INTACT
-// (extractFromPDF, extractFromTXT, extractFromImage, ocrPage, 
-// normalizeWhitespace, classifyDocument, cleanBill, cleanHansard, 
-// cleanOrderPaper, cleanCommitteeReport, cleanGazette, extractDate, 
-// detectSector, generateSummary, summarizeInChunks, escapeHTML, displayResult)
-// ======================================================
-
-
 
 // ======================================================
 // FILE TYPE DETECTION
