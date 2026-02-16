@@ -1,5 +1,5 @@
 // ======================================================
-// CIVICLENS v2 — PRODUCTION PIPELINE (UPDATED, FIXED)
+// CIVICLENS v2 — PRODUCTION PIPELINE (SINGLE FILE, FULLY UPDATED)
 // ======================================================
 
 import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1";
@@ -123,15 +123,9 @@ async function processSingleFile(file) {
   const cleanedText = cleanByType(rawText, docType);
 
   // ---------------------------
-  // Extract date
-  // ---------------------------
-  let date = extractDate(cleanedText);
-  if (!date) {
-    // Fallback: try first line (common in Hansard/Order Paper)
-    const firstLine = cleanedText.split("\n")[0];
-    const fallback = firstLine.match(/\d{1,2}\s*[A-Za-z]{3,9}\s*\d{4}/);
-    date = fallback ? fixOCRDate(fallback[0]) : "Not detected";
-  }
+  // Extract date (filename + text + type-aware)
+// ---------------------------
+  const date = extractDate(cleanedText, file.name, docType);
 
   // ---------------------------
   // Detect sector
@@ -151,7 +145,7 @@ async function processSingleFile(file) {
 
   return {
     title: file.name.replace(/\.[^/.]+$/, ""),
-    date: date,
+    date,
     sector,
     summary,
     fullText: cleanedText.slice(0, 8000)
@@ -229,6 +223,7 @@ function cleanBill(text) {
   return text
     .replace(/REPUBLIC OF KENYA[\s\S]{0,200}/gi, "")
     .replace(/ARRANGEMENT OF CLAUSES[\s\S]{0,2000}/gi, "")
+    .replace(/OBJECTS AND REASONS[\s\S]{0,2000}/gi, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
@@ -253,8 +248,22 @@ function cleanHansard(text) {
     .trim();
 }
 
-function cleanOrderPaper(text) { return text.replace(/\s{2,}/g, " ").trim(); }
-function cleanCommitteeReport(text) { return text.replace(/\s{2,}/g, " ").trim(); }
+function cleanOrderPaper(text) {
+  return text
+    .replace(/REPUBLIC OF KENYA[\s\S]{0,200}/gi, "")
+    .replace(/ORDERS OF THE DAY[\s\S]{0,200}/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function cleanCommitteeReport(text) {
+  return text
+    .replace(/REPUBLIC OF KENYA[\s\S]{0,200}/gi, "")
+    .replace(/REPORT OF THE[\s\S]{0,300}/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function cleanGazette(text) {
   return text
     .replace(/SPECIAL ISSUE[\s\S]{0,400}/gi, "")
@@ -384,36 +393,81 @@ function classifyDocument(text) {
 }
 
 // ======================================================
-// DATE EXTRACTION (UPDATED)
+// DATE EXTRACTION (IMPROVED)
 // ======================================================
-function extractDate(text) {
+function extractDateFromFilename(name) {
+  const decoded = decodeURIComponent(name).replace(/\.[^/.]+$/, "");
+
+  let m = decoded.match(/\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\s+\d{4}\b/i);
+  if (m) return fixOCRDate(m[0]);
+
+  m = decoded.match(/\b[A-Za-z]{3,9}\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\b/i);
+  if (m) return fixOCRDate(m[0]);
+
+  m = decoded.match(/\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\s+\d{4}\b/i);
+  if (m) {
+    const cleaned = m[0].replace(/^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+/i, "");
+    return fixOCRDate(cleaned);
+  }
+
+  m = decoded.match(/\b(20[0-3]\d)\b/);
+  if (m) return m[0];
+
+  return null;
+}
+
+function extractDateFromText(text) {
   const cleaned = text.replace(/\s+/g, " ").trim();
+
   const patterns = [
-    /\b\d{1,2}(?:st|nd|rd|th)?\s*[A-Za-z]{3,9}\s*\d{4}\b/i, // 4th December 2025
-    /\b[A-Za-z]{3,9}\s*\d{1,2},?\s*\d{4}\b/i,               // December 4, 2025
-    /\b\d{1,2}\/\d{1,2}\/\d{4}\b/i                           // 04/12/2025
+    /\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\s+\d{4}\b/i,
+    /\b[A-Za-z]{3,9}\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\b/i,
+    /\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\s+\d{4}\b/i,
+    /\b\d{1,2}\/\d{1,2}\/\d{4}\b/i
   ];
 
   for (const p of patterns) {
     const match = cleaned.match(p);
-    if (match) return fixOCRDate(match[0]);
+    if (match) {
+      let s = match[0];
+      s = s.replace(/^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+/i, "");
+      return fixOCRDate(s);
+    }
   }
 
   return null;
 }
 
+function extractDate(text, filename, docType) {
+  const fromName = extractDateFromFilename(filename);
+  if (fromName) return fromName;
+
+  const fromText = extractDateFromText(text);
+  if (fromText) return fromText;
+
+  const firstLine = text.split("\n")[0];
+
+  if (docType === "hansard" || docType === "order_paper") {
+    const m = firstLine.match(/\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\s+\d{4}\b/i);
+    if (m) return fixOCRDate(m[0]);
+  }
+
+  return "Not detected";
+}
+
 // ======================================================
-// SECTOR DETECTION
+// SECTOR DETECTION (SLIGHTLY ENRICHED)
 // ======================================================
 function detectSector(text) {
   const t = text.toLowerCase();
   const sectors = {
-    Security: /(security|police|defence|military|immigration|citizenship|criminal|terror)/g,
-    Finance: /(budget|appropriation|finance|tax|revenue|expenditure|treasury)/g,
-    Education: /(education|school|university|teacher|curriculum|academy)/g,
-    Health: /(health|hospital|clinic|disease|medical|public health)/g,
-    Environment: /(environment|climate|wildlife|forest|forestry|pollution)/g,
-    Justice: /(judiciary|court|legal|procedure|contract|law)/g
+    Security: /(security|police|defence|defense|military|immigration|citizenship|criminal|terror|counter[- ]terrorism)/g,
+    Finance: /(budget|appropriation|finance|tax|revenue|expenditure|treasury|levy|duty|customs)/g,
+    Education: /(education|school|university|teacher|curriculum|academy|student|learner)/g,
+    Health: /(health|hospital|clinic|disease|medical|public health|immunization|vaccine)/g,
+    Environment: /(environment|climate|wildlife|forest|forestry|pollution|conservation|biodiversity)/g,
+    Justice: /(judiciary|court|legal|procedure|contract|law|tribunal|appeal|magistrate)/g,
+    CreativeEconomy: /(creative economy|film|music|arts|culture|copyright|intellectual property|performing arts)/g
   };
 
   let best = "General Governance";
@@ -424,7 +478,7 @@ function detectSector(text) {
     const score = matches ? matches.length : 0;
     if (score > maxScore) {
       maxScore = score;
-      best = name;
+      best = name === "CreativeEconomy" ? "Creative Economy" : name;
     }
   }
 
@@ -439,7 +493,8 @@ async function generateSummary(text) {
 
   try {
     return await summarizeInChunks(text);
-  } catch {
+  } catch (err) {
+    console.error("Chunked summarization failed:", err);
     return text.slice(0, 300) + "...";
   }
 }
