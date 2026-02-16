@@ -118,7 +118,7 @@ async function processSingleFile(file) {
   // Classify & clean
   // ---------------------------
   const docType = classifyDocument(rawText);
-  const cleanedText = cleanByType(cleanedTextFallback(rawText, docType));
+  const cleanedText = cleanByType(cleanedTextFallback(rawText, docType)) || rawText;
 
   // ---------------------------
   // Extract date
@@ -205,13 +205,10 @@ function cleanedTextFallback(text, type) {
 
 function cleanByType(text) {
   let t = text.trim();
-
-  // remove stray page numbers or headers
   t = t.replace(/\bPage\s*\d+\b/gi, "");
-  t = t.replace(/\b\d{3,4}\b/g, ""); // standalone numbers
+  t = t.replace(/\b\d{3,4}\b/g, "");
   return t.trim();
 }
-
 
 // ======================================================
 // FILE TYPE DETECTION
@@ -307,44 +304,21 @@ function normalizeWhitespace(text) {
   return text.replace(/\s{2,}/g, " ").trim();
 }
 
-function normalizeOCRText(text) {
-  return text
-    .replace(/[^a-zA-Z0-9.,;:\s]/g, " ")
-    .replace(/\s{2,}/g, " ")
-    .replace(/(\w)\s+(\w)/g, "$1 $2")
-    .trim();
-}
-
 function classifyDocument(text) {
   const t = text.toLowerCase();
 
   if (/a bill for|arrangement of clauses|objects and reasons|enacted by/i.test(t))
     return "bill";
-
   if (/the house met|hansard|speaker|hon\./i.test(t))
     return "hansard";
-
   if (/order of business|order paper|prayers/i.test(t))
     return "order_paper";
-
   if (/committee on|departmental committee|report of/i.test(t))
     return "committee_report";
-
   if (/kenya gazette|gazette notice/i.test(t))
     return "gazette";
 
   return "general";
-}
-
-function cleanByType(text, type) {
-  switch (type) {
-    case "bill": return cleanBill(text);
-    case "hansard": return cleanHansard(text);
-    case "order_paper": return cleanOrderPaper(text);
-    case "committee_report": return cleanCommitteeReport(text);
-    case "gazette": return cleanGazette(text);
-    default: return text.trim();
-  }
 }
 
 function cleanBill(text) {
@@ -382,14 +356,13 @@ function cleanGazette(text) {
     .replace(/NATIONAL ASSEMBLY RECEIVED[\s\S]{0,200}/gi, "")
     .replace(/DIRECTOR LEGAL SERVICES[\s\S]{0,200}/gi, "")
     .replace(/PRINTED AND PUBLISHED BY[\s\S]{0,200}/gi, "")
-    .replace(/\b\d{3,4}\b/g, "") // remove standalone page numbers
+    .replace(/\b\d{3,4}\b/g, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
 
-
 // ======================================================
-// DATE EXTRACTION (FIXED)
+// DATE EXTRACTION
 // ======================================================
 function extractDate(text) {
   const cleaned = text.replace(/\s+/g, " ");
@@ -409,7 +382,7 @@ function extractDate(text) {
 }
 
 // ======================================================
-// SECTOR DETECTION (FIXED)
+// SECTOR DETECTION
 // ======================================================
 function detectSector(text) {
   const t = text.toLowerCase();
@@ -479,7 +452,6 @@ async function summarizeInChunks(text) {
     return text.slice(0, 300) + "...";
 
   return summaries.join(" ");
- 
 }
 
 // ======================================================
