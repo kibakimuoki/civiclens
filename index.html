@@ -5,12 +5,23 @@
   <title>CivicLens — Legislative Summaries</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- PDF.js -->
+  <!-- ============================= -->
+  <!-- PDF.js (WITH WORKER FIX)     -->
+  <!-- ============================= -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-  <!-- Tesseract.js -->
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+  </script>
+
+  <!-- ============================= -->
+  <!-- Tesseract.js                 -->
+  <!-- ============================= -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
 
-  <!-- Styles -->
+  <!-- ============================= -->
+  <!-- Styles                       -->
+  <!-- ============================= -->
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -115,20 +126,12 @@
     .summary-card details {
       margin-top: 0.5rem;
       cursor: pointer;
-      transition: all 0.3s ease;
-    }
-
-    .summary-card details[open] p {
-      max-height: 1000px;
     }
 
     .summary-card details p {
       margin: 0.5rem 0 0 0;
       font-size: 0.85rem;
       white-space: pre-wrap;
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.3s ease;
     }
 
     @media (max-width: 600px) {
@@ -138,6 +141,7 @@
     }
   </style>
 </head>
+
 <body>
 
 <header>
@@ -156,25 +160,28 @@
   </div>
 
   <div id="results">
-    <p id="placeholder" style="text-align:center; color:#6b7280;">Recent Legislative Summaries will appear here after processing files.</p>
+    <p id="placeholder" style="text-align:center; color:#6b7280;">
+      Recent Legislative Summaries will appear here after processing files.
+    </p>
   </div>
 </main>
 
-<!-- App.js -->
+<!-- ============================= -->
+<!-- App.js (MUST BE MODULE)      -->
+<!-- ============================= -->
 <script type="module" src="app.js"></script>
 
-<!-- Extra JS for animations & auto-scroll -->
+<!-- ============================= -->
+<!-- Animation + Auto-scroll      -->
+<!-- ============================= -->
 <script>
-  // Animate new summary cards and auto-scroll
   const resultsDiv = document.getElementById("results");
 
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       mutation.addedNodes.forEach(node => {
         if (node.classList && node.classList.contains("summary-card")) {
-          // Trigger fade-in animation
           setTimeout(() => node.classList.add("visible"), 50);
-          // Scroll to newest summary smoothly
           node.scrollIntoView({ behavior: "smooth", block: "start" });
         }
       });
