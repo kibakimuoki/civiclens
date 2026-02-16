@@ -324,6 +324,7 @@ function cleanHansard(text) {
 }
 
 
+
 function cleanOrderPaper(text) {
   return text
     .replace(/PRAYERS[\s\S]{0,200}/gi, "")
