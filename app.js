@@ -90,7 +90,7 @@ processBtn.addEventListener("click", async () => {
 });
 
 // ======================================================
-// PROCESS SINGLE FILE — IMPROVED
+// PROCESS SINGLE FILE
 // ======================================================
 async function processSingleFile(file) {
   const fileType = detectFileType(file);
@@ -118,7 +118,7 @@ async function processSingleFile(file) {
   // Classify & clean
   // ---------------------------
   const docType = classifyDocument(rawText);
-  const cleanedText = cleanByType(cleanedTextFallback(rawText, docType)) || rawText;
+  const cleanedText = cleanByType(rawText, docType);
 
   // ---------------------------
   // Extract date
@@ -154,12 +154,20 @@ async function processSingleFile(file) {
 // ======================================================
 // OCR TEXT NORMALIZATION
 // ======================================================
+function normalizeWhitespace(text) {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
 function normalizeOCRText(text) {
   return text
-    .replace(/[^a-zA-Z0-9.,;:\s]/g, " ")
-    .replace(/\s{2,}/g, " ")
-    .replace(/(\d)\s+(\d)/g, "$1$2")
-    .replace(/([A-Za-z])\s+([A-Za-z])/g, "$1$2")
+    .replace(/[^a-zA-Z0-9.,;:\s]/g, " ")        // remove weird characters
+    .replace(/(\d)\s+(\d)/g, "$1$2")            // join split numbers
+    .replace(/([A-Za-z])\s+([a-z])/g, "$1 $2")  // keep space between letters
+    .replace(/\s{2,}/g, " ")                    // collapse multiple spaces
     .trim();
 }
 
@@ -192,22 +200,55 @@ function fixOCRDate(dateStr) {
 // ======================================================
 // CLEAN BY TYPE
 // ======================================================
-function cleanedTextFallback(text, type) {
-  switch (type) {
-    case "bill": return cleanBill(text);
-    case "hansard": return cleanHansard(text);
-    case "order_paper": return cleanOrderPaper(text);
-    case "committee_report": return cleanCommitteeReport(text);
-    case "gazette": return cleanGazette(text);
-    default: return text;
-  }
-}
-
-function cleanByType(text) {
+function cleanByType(text, type) {
   let t = text.trim();
+
+  switch (type) {
+    case "bill": t = cleanBill(t); break;
+    case "hansard": t = cleanHansard(t); break;
+    case "order_paper": t = cleanOrderPaper(t); break;
+    case "committee_report": t = cleanCommitteeReport(t); break;
+    case "gazette": t = cleanGazette(t); break;
+  }
+
+  // remove stray page numbers or headers
   t = t.replace(/\bPage\s*\d+\b/gi, "");
   t = t.replace(/\b\d{3,4}\b/g, "");
   return t.trim();
+}
+
+function cleanBill(text) {
+  return text
+    .replace(/REPUBLIC OF KENYA[\s\S]{0,200}/gi, "")
+    .replace(/ARRANGEMENT OF CLAUSES[\s\S]{0,2000}/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function cleanHansard(text) {
+  return text
+    .replace(/Disclaimer[\s\S]{0,500}?Hansard Editor\./gi, "")
+    .replace(/THE HANSARD[\s\S]{0,200}?The House met/gi, "The House met")
+    .replace(/\[\s*Applause\s*\]/gi, "")
+    .replace(/\[\s*Laughter\s*\]/gi, "")
+    .replace(/\(The Quorum Bell was rung\)/gi, "")
+    .replace(/Vol\.\s*[IVXLC]+\s*No\.\s*\d+/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function cleanOrderPaper(text) { return text.replace(/\s{2,}/g, " ").trim(); }
+function cleanCommitteeReport(text) { return text.replace(/\s{2,}/g, " ").trim(); }
+function cleanGazette(text) {
+  return text
+    .replace(/SPECIAL ISSUE[\s\S]{0,400}/gi, "")
+    .replace(/Kenya Gazette Supplement[\s\S]{0,400}/gi, "")
+    .replace(/NATIONAL ASSEMBLY RECEIVED[\s\S]{0,200}/gi, "")
+    .replace(/DIRECTOR LEGAL SERVICES[\s\S]{0,200}/gi, "")
+    .replace(/PRINTED AND PUBLISHED BY[\s\S]{0,200}/gi, "")
+    .replace(/\b\d{3,4}\b/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 // ======================================================
@@ -298,67 +339,16 @@ async function ocrPage(page) {
 }
 
 // ======================================================
-// CLEANING + CLASSIFICATION
+// CLASSIFICATION
 // ======================================================
-function normalizeWhitespace(text) {
-  return text.replace(/\s{2,}/g, " ").trim();
-}
-
 function classifyDocument(text) {
   const t = text.toLowerCase();
-
-  if (/a bill for|arrangement of clauses|objects and reasons|enacted by/i.test(t))
-    return "bill";
-  if (/the house met|hansard|speaker|hon\./i.test(t))
-    return "hansard";
-  if (/order of business|order paper|prayers/i.test(t))
-    return "order_paper";
-  if (/committee on|departmental committee|report of/i.test(t))
-    return "committee_report";
-  if (/kenya gazette|gazette notice/i.test(t))
-    return "gazette";
-
+  if (/a bill for|arrangement of clauses|objects and reasons|enacted by/i.test(t)) return "bill";
+  if (/the house met|hansard|speaker|hon\./i.test(t)) return "hansard";
+  if (/order of business|order paper|prayers/i.test(t)) return "order_paper";
+  if (/committee on|departmental committee|report of/i.test(t)) return "committee_report";
+  if (/kenya gazette|gazette notice/i.test(t)) return "gazette";
   return "general";
-}
-
-function cleanBill(text) {
-  return text
-    .replace(/REPUBLIC OF KENYA[\s\S]{0,200}/gi, "")
-    .replace(/ARRANGEMENT OF CLAUSES[\s\S]{0,2000}/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-
-function cleanHansard(text) {
-  return text
-    .replace(/Disclaimer[\s\S]{0,500}?Hansard Editor\./gi, "")
-    .replace(/THE HANSARD[\s\S]{0,200}?The House met/gi, "The House met")
-    .replace(/\[\s*Applause\s*\]/gi, "")
-    .replace(/\[\s*Laughter\s*\]/gi, "")
-    .replace(/\(The Quorum Bell was rung\)/gi, "")
-    .replace(/Vol\.\s*[IVXLC]+\s*No\.\s*\d+/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-
-function cleanOrderPaper(text) {
-  return text.replace(/\s{2,}/g, " ").trim();
-}
-
-function cleanCommitteeReport(text) {
-  return text.replace(/\s{2,}/g, " ").trim();
-}
-
-function cleanGazette(text) {
-  return text
-    .replace(/SPECIAL ISSUE[\s\S]{0,400}/gi, "")
-    .replace(/Kenya Gazette Supplement[\s\S]{0,400}/gi, "")
-    .replace(/NATIONAL ASSEMBLY RECEIVED[\s\S]{0,200}/gi, "")
-    .replace(/DIRECTOR LEGAL SERVICES[\s\S]{0,200}/gi, "")
-    .replace(/PRINTED AND PUBLISHED BY[\s\S]{0,200}/gi, "")
-    .replace(/\b\d{3,4}\b/g, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
 }
 
 // ======================================================
@@ -386,7 +376,6 @@ function extractDate(text) {
 // ======================================================
 function detectSector(text) {
   const t = text.toLowerCase();
-
   const sectors = {
     Security: /(security|police|defence|military|immigration|citizenship|criminal|terror)/g,
     Finance: /(budget|appropriation|finance|tax|revenue|expenditure|treasury)/g,
@@ -415,8 +404,7 @@ function detectSector(text) {
 // SUMMARIZATION
 // ======================================================
 async function generateSummary(text) {
-  if (!text || text.length < 200 || !summarizer)
-    return text.slice(0, 300) + "...";
+  if (!text || text.length < 200 || !summarizer) return text.slice(0, 300) + "...";
 
   try {
     return await summarizeInChunks(text);
@@ -439,17 +427,11 @@ async function summarizeInChunks(text) {
       do_sample: false
     });
 
-    const summary =
-      result?.[0]?.summary_text ||
-      result?.[0]?.generated_text ||
-      "";
-
-    if (summary.trim().length > 20)
-      summaries.push(summary.trim());
+    const summary = result?.[0]?.summary_text || result?.[0]?.generated_text || "";
+    if (summary.trim().length > 20) summaries.push(summary.trim());
   }
 
-  if (!summaries.length)
-    return text.slice(0, 300) + "...";
+  if (!summaries.length) return text.slice(0, 300) + "...";
 
   return summaries.join(" ");
 }
