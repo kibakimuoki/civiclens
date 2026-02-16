@@ -230,23 +230,27 @@ function cleanBill(text) {
 
 function cleanHansard(text) {
   return text
+    // Remove disclaimer block
     .replace(/Disclaimer[\s\S]{0,500}?Hansard Editor\./gi, "")
+
+    // Normalize header
     .replace(/THE HANSARD[\s\S]{0,200}?The House met/gi, "The House met")
-    .replace(/
 
-\[\s*Applause\s*\]
+    // Remove stage directions like [Applause] or [Laughter]
+    .replace(/\[\s*Applause\s*\]/gi, "")
+    .replace(/\[\s*Laughter\s*\]/gi, "")
 
-/gi, "")
-    .replace(/
-
-\[\s*Laughter\s*\]
-
-/gi, "")
+    // Remove quorum bell note
     .replace(/\(The Quorum Bell was rung\)/gi, "")
+
+    // Remove volume numbering
     .replace(/Vol\.\s*[IVXLC]+\s*No\.\s*\d+/gi, "")
+
+    // Clean extra whitespace
     .replace(/\s{2,}/g, " ")
     .trim();
 }
+
 
 function cleanOrderPaper(text) {
   return text
