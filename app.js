@@ -304,8 +304,6 @@ function cleanBill(text) {
     .replace(/\s{2,}/g, " ")
     .trim();
 }
-
-
 function cleanHansard(text) {
   return text
     .replace(/Disclaimer\s*:\s*The electronic version[\s\S]{0,300}/gi, "")
@@ -322,9 +320,6 @@ function cleanHansard(text) {
     .replace(/\s{2,}/g, " ")
     .trim();
 }
-
-
-
 function cleanOrderPaper(text) {
   return text
     .replace(/PRAYERS[\s\S]{0,200}/gi, "")
