@@ -113,6 +113,7 @@ async function processSingleFile(file) {
   // ---------------------------
   rawText = normalizeWhitespace(rawText);
   rawText = normalizeOCRText(rawText);
+  rawText = rawText.replace(/\n+/g, " ").trim(); // <-- NEW: remove line breaks for dates & summarization
 
   // ---------------------------
   // Classify & clean
@@ -211,7 +212,6 @@ function cleanByType(text, type) {
     case "gazette": t = cleanGazette(t); break;
   }
 
-  // remove stray page numbers or headers
   t = t.replace(/\bPage\s*\d+\b/gi, "");
   t = t.replace(/\b\d{3,4}\b/g, "");
   return t.trim();
@@ -308,7 +308,8 @@ async function extractFromPDF(file) {
       const content = await page.getTextContent();
       let pageText = content.items.map(item => item.str).join(" ").trim();
 
-      if (pageText.length < 40 && ocrUsed < MAX_OCR_PAGES) {
+      // NEW: OCR threshold more lenient & detect broken chars
+      if ((pageText.length < 100 || /[\uFFFD]/.test(pageText)) && ocrUsed < MAX_OCR_PAGES) {
         ocrUsed++;
         pageText = await ocrPage(page);
       }
@@ -355,12 +356,14 @@ function classifyDocument(text) {
 // DATE EXTRACTION
 // ======================================================
 function extractDate(text) {
-  const cleaned = text.replace(/\s+/g, " ");
+  const cleaned = text.replace(/\s+/g, " ").trim();
 
   const patterns = [
     /\b\d{1,2}\s*(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
     /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s*\d{4}\b/i,
-    /\b\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}\b/i
+    /\b\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}\b/i,
+    // NEW: Weekday-based dates
+    /\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s*\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i
   ];
 
   for (let p of patterns) {
@@ -458,7 +461,7 @@ function displayResult(doc) {
     <p><strong>AI Summary:</strong> ${escapeHTML(doc.summary)}</p>
     <details>
       <summary>View Extracted Text</summary>
-      <p>${escapeHTML(doc.fullText)}</p>
+      <pre>${escapeHTML(doc.fullText)}</pre>
     </details>
   `;
 
