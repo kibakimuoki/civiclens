@@ -382,7 +382,7 @@ async function summarizeInChunks(text) {
   if (!summaries.length)
     return text.slice(0, 300) + "...";
 
-  return summaries.join(" ").slice(0, 1500);
+  return summaries.join(" ");
  
 }
 
