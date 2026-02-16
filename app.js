@@ -275,11 +275,12 @@ function cleanBill(text) {
 
 function cleanHansard(text) {
   return text
-    .replace(/REPUBLIC OF KENYA[\s\S]{0,400}?NATIONAL ASSEMBLY DEBATES/gi, "")
-    .replace(/Vol\.\s*[IVXLC]+\s*No\.\s*\d+/gi, "")
+    .replace(/Disclaimer[\s\S]{0,500}?Hansard Editor\./gi, "")
+    .replace(/THE HANSARD[\s\S]{0,200}?The House met/gi, "The House met")
     .replace(/\[\s*Applause\s*\]/gi, "")
     .replace(/\[\s*Laughter\s*\]/gi, "")
     .replace(/\(The Quorum Bell was rung\)/gi, "")
+    .replace(/Vol\.\s*[IVXLC]+\s*No\.\s*\d+/gi, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
@@ -293,8 +294,17 @@ function cleanCommitteeReport(text) {
 }
 
 function cleanGazette(text) {
-  return text.replace(/\s{2,}/g, " ").trim();
+  return text
+    .replace(/SPECIAL ISSUE[\s\S]{0,400}/gi, "")
+    .replace(/Kenya Gazette Supplement[\s\S]{0,400}/gi, "")
+    .replace(/NATIONAL ASSEMBLY RECEIVED[\s\S]{0,200}/gi, "")
+    .replace(/DIRECTOR LEGAL SERVICES[\s\S]{0,200}/gi, "")
+    .replace(/PRINTED AND PUBLISHED BY[\s\S]{0,200}/gi, "")
+    .replace(/\b\d{3,4}\b/g, "") // remove standalone page numbers
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
+
 
 // ======================================================
 // DATE EXTRACTION (FIXED)
