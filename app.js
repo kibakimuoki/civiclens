@@ -374,7 +374,11 @@ async function summarizeInChunks(text) {
       do_sample: false
     });
 
-    const summary = result?.[0]?.generated_text || "";
+    const summary =
+      result?.[0]?.summary_text ||
+      result?.[0]?.generated_text ||
+      "";
+
     if (summary.trim().length > 20)
       summaries.push(summary.trim());
   }
