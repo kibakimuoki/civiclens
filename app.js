@@ -308,14 +308,10 @@ function cleanHansard(text) {
   return text
     .replace(/Disclaimer\s*:\s*The electronic version[\s\S]{0,300}/gi, "")
     .replace(/
-
 \[\s*Applause\s*\]
-
 /gi, "")
     .replace(/
-
 \[\s*Laughter\s*\]
-
 /gi, "")
     .replace(/\s{2,}/g, " ")
     .trim();
