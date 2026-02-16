@@ -155,6 +155,14 @@ function cleanExtractedText(text) {
   return text.trim();
 }
 
+function normalizeOCRText(text) {
+    text = text.replace(/[^a-zA-Z0-9.,;:\s]/g, " "); // remove weird symbols
+    text = text.replace(/\s{2,}/g, " ");            // collapse spaces
+    text = text.replace(/(\w)\s+(\w)/g, "$1 $2");   // fix missing spaces
+    return text.trim();
+}
+
+
 // ==========================
 // NORMALIZE BILL STRUCTURE
 // ==========================
@@ -270,7 +278,7 @@ async function generateSummary(text) {
   if (!text || !summarizer) return text.substring(0, 300) + "...";
 
   try {
-    const CHUNK_SIZE = 2000;
+    const CHUNK_SIZE = 1500;
     let chunks = [];
     for (let i = 0; i < text.length; i += CHUNK_SIZE) {
       const input = text.slice(i, i + CHUNK_SIZE);
@@ -279,7 +287,7 @@ async function generateSummary(text) {
         min_length: 60,
         do_sample: false
       });
-      chunks.push(result?.[0]?.generated_text || input.substring(0, 180));
+      chunks.push(result?.[0]?.generated_text || chunk);
     }
     return chunks.join(" ").substring(0, 500) + "...";
   } catch (err) {
